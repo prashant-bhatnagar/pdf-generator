@@ -2609,13 +2609,13 @@ public final class OrderConfirmationPdfGenerator {
     private static void demonstrateConcurrentProcessing(final ConcurrentOrderProcessor processor) 
             throws Exception {
         
-        System.out.println("\n" + "=".repeat(90));
-        System.out.println("🚀 CONCURRENT ORDER PROCESSING DEMONSTRATION");
-        System.out.println("=".repeat(90));
+        LOGGER.info("=".repeat(90));
+        LOGGER.info("🚀 CONCURRENT ORDER PROCESSING DEMONSTRATION");
+        LOGGER.info("=".repeat(90));
         
         // Demo 1: Single Order Processing
-        System.out.println("\n📋 Demo 1: Single Order Processing with Monitoring");
-        System.out.println("-".repeat(50));
+        LOGGER.info("\n📋 Demo 1: Single Order Processing with Monitoring");
+        LOGGER.info("-".repeat(50));
         
         final var singleOrder = createSampleOrder();
         displayOrderSummary(singleOrder);
@@ -2627,11 +2627,11 @@ public final class OrderConfirmationPdfGenerator {
         Thread.sleep(1000);
         
         // Demo 2: Concurrent Batch Processing
-        System.out.println("\n📦 Demo 2: Concurrent Batch Processing (10 Orders)");
-        System.out.println("-".repeat(50));
+        LOGGER.info("\n📦 Demo 2: Concurrent Batch Processing (10 Orders)");
+        LOGGER.info("-".repeat(50));
         
         final var batchOrders = createOrderBatch(10);
-        System.out.println("Processing %d orders concurrently...".formatted(batchOrders.size()));
+        LOGGER.info("Processing %d orders concurrently...".formatted(batchOrders.size()));
         
         final var batchStart = System.currentTimeMillis();
         final var batchResults = processor.processBatchAsync(batchOrders).get();
@@ -2640,8 +2640,8 @@ public final class OrderConfirmationPdfGenerator {
         displayBatchResults(batchResults, batchTime);
         
         // Demo 3: High-Throughput Stress Test
-        System.out.println("\n⚡ Demo 3: High-Throughput Stress Test (25 Orders)");
-        System.out.println("-".repeat(50));
+        LOGGER.info("\n⚡ Demo 3: High-Throughput Stress Test (25 Orders)");
+        LOGGER.info("-".repeat(50));
         
         final var stressOrders = createOrderBatch(25); // Reduced for faster demo
         final var stressStart = System.currentTimeMillis();
@@ -2651,7 +2651,7 @@ public final class OrderConfirmationPdfGenerator {
             .map(processor::processOrderAsync)
             .collect(Collectors.toList());
         
-        System.out.println("Submitted %d orders for concurrent processing...".formatted(stressOrders.size()));
+        LOGGER.info("Submitted %d orders for concurrent processing...".formatted(stressOrders.size()));
         
         // Wait for all to complete
         final var stressResults = stressFutures.stream()
@@ -2665,8 +2665,8 @@ public final class OrderConfirmationPdfGenerator {
         Thread.sleep(1000);
         
         // Demo 4: Performance Metrics & Monitoring
-        System.out.println("\n📊 Demo 4: Performance Metrics & System Health");
-        System.out.println("-".repeat(50));
+        LOGGER.info("\n📊 Demo 4: Performance Metrics & System Health");
+        LOGGER.info("-".repeat(50));
         
         displaySystemMetrics(processor);
         
@@ -2674,20 +2674,20 @@ public final class OrderConfirmationPdfGenerator {
         Thread.sleep(1000);
         
         // Demo 5: Resilience Testing (Simulated Load)
-        System.out.println("\n🛡️ Demo 5: Resilience & Circuit Breaker Demo");
-        System.out.println("-".repeat(50));
+        LOGGER.info("\n🛡️ Demo 5: Resilience & Circuit Breaker Demo");
+        LOGGER.info("-".repeat(50));
         
         demonstrateResilience(processor);
         
-        System.out.println("\n" + "=".repeat(90));
-        System.out.println("✅ CONCURRENT PROCESSING DEMONSTRATION COMPLETE!");
-        System.out.println("🏆 All enterprise-grade features validated successfully");
-        System.out.println("=".repeat(90));
+        LOGGER.info("\n" + "=".repeat(90));
+        LOGGER.info("✅ CONCURRENT PROCESSING DEMONSTRATION COMPLETE!");
+        LOGGER.info("🏆 All enterprise-grade features validated successfully");
+        LOGGER.info("=".repeat(90));
         
         // Shutdown the processor to stop background monitoring
-        System.out.println("\n🔄 Shutting down concurrent processor...");
+        LOGGER.info("\n🔄 Shutting down concurrent processor...");
         processor.shutdown();
-        System.out.println("✅ Graceful shutdown completed. Application terminating.");
+        LOGGER.info("✅ Graceful shutdown completed. Application terminating.");
     }
     
     /**
@@ -2700,16 +2700,16 @@ public final class OrderConfirmationPdfGenerator {
             final ConsentManagementService consentService,
             final SubjectAccessRequestService sarService) throws Exception {
         
-        System.out.println("\n" + "=".repeat(100));
-        System.out.println("🛡️ GDPR-COMPLIANT ORDER PROCESSING WITH DATA PROTECTION");
-        System.out.println("=".repeat(100));
+        LOGGER.info("\n" + "=".repeat(100));
+        LOGGER.info("🛡️ GDPR-COMPLIANT ORDER PROCESSING WITH DATA PROTECTION");
+        LOGGER.info("=".repeat(100));
         
         // Phase 1: Concurrent Processing Demo (existing)
         demonstrateConcurrentProcessing(processor);
         
-        System.out.println("\n" + "=".repeat(100));
-        System.out.println("🔐 DATA PROTECTION & PRIVACY COMPLIANCE DEMONSTRATION");
-        System.out.println("=".repeat(100));
+        LOGGER.info("\n" + "=".repeat(100));
+        LOGGER.info("🔐 DATA PROTECTION & PRIVACY COMPLIANCE DEMONSTRATION");
+        LOGGER.info("=".repeat(100));
         
         // Phase 2: Data Protection Demo
         demonstrateDataProtectionFeatures(auditService, anonymizationService, 
@@ -2722,11 +2722,11 @@ public final class OrderConfirmationPdfGenerator {
         demonstrateComplianceReporting(auditService, consentService, sarService);
         
         // Shutdown all services
-        System.out.println("\n🔄 Shutting down all data protection services...");
+        LOGGER.info("\n🔄 Shutting down all data protection services...");
         processor.shutdown();
         auditService.shutdown();
         sarService.shutdown();
-        System.out.println("✅ Complete GDPR-compliant shutdown completed.");
+        LOGGER.info("✅ Complete GDPR-compliant shutdown completed.");
     }
     
     /**
@@ -2738,8 +2738,8 @@ public final class OrderConfirmationPdfGenerator {
             final ConsentManagementService consentService,
             final SubjectAccessRequestService sarService) throws Exception {
         
-        System.out.println("\n📋 Demo 1: Data Classification & Anonymization");
-        System.out.println("-".repeat(60));
+        LOGGER.info("\n📋 Demo 1: Data Classification & Anonymization");
+        LOGGER.info("-".repeat(60));
         
         final var sampleCustomer = createSampleOrder().customer();
         
@@ -2747,22 +2747,22 @@ public final class OrderConfirmationPdfGenerator {
         final var personalData = anonymizationService.detectPersonalData(
             sampleCustomer.getFullName() + " " + sampleCustomer.email() + " " + sampleCustomer.phone());
         
-        System.out.println("🔍 Personal Data Detection Results:");
+        LOGGER.info("🔍 Personal Data Detection Results:");
         personalData.forEach((data, classification) -> 
-            System.out.println("  • %s: %s".formatted(data, classification.getDisplayName())));
+            LOGGER.info("  • %s: %s".formatted(data, classification.getDisplayName())));
         
         // Demonstrate anonymization
-        System.out.println("\n🎭 Data Anonymization Results:");
-        System.out.println("  • Original Email: %s".formatted(sampleCustomer.email()));
-        System.out.println("  • Anonymized: %s".formatted(
+        LOGGER.info("\n🎭 Data Anonymization Results:");
+        LOGGER.info("  • Original Email: %s".formatted(sampleCustomer.email()));
+        LOGGER.info("  • Anonymized: %s".formatted(
             anonymizationService.anonymizeData(sampleCustomer.email(), DataClassification.PERSONAL)));
-        System.out.println("  • Pseudonymized: %s".formatted(
+        LOGGER.info("  • Pseudonymized: %s".formatted(
             anonymizationService.pseudonymizeData(sampleCustomer.email(), "customer")));
         
         Thread.sleep(1000);
         
-        System.out.println("\n📝 Demo 2: Consent Management");
-        System.out.println("-".repeat(60));
+        LOGGER.info("\n📝 Demo 2: Consent Management");
+        LOGGER.info("-".repeat(60));
         
         final var customerId = sampleCustomer.customerId();
         
@@ -2775,50 +2775,50 @@ public final class OrderConfirmationPdfGenerator {
             "192.168.1.100", "Mozilla/5.0", Duration.ofDays(90));
         
         final var consentSummary = consentService.getConsentSummary(customerId);
-        System.out.println("📊 Consent Summary for %s:".formatted(customerId));
-        System.out.println("  • Total Consents: %d".formatted(consentSummary.totalConsents()));
-        System.out.println("  • Valid Consents: %d".formatted(consentSummary.validConsents()));
-        System.out.println("  • Expired Consents: %d".formatted(consentSummary.expiredConsents()));
-        System.out.println("  • Near Expiry: %d".formatted(consentSummary.nearExpiryConsents()));
+        LOGGER.info("📊 Consent Summary for %s:".formatted(customerId));
+        LOGGER.info("  • Total Consents: %d".formatted(consentSummary.totalConsents()));
+        LOGGER.info("  • Valid Consents: %d".formatted(consentSummary.validConsents()));
+        LOGGER.info("  • Expired Consents: %d".formatted(consentSummary.expiredConsents()));
+        LOGGER.info("  • Near Expiry: %d".formatted(consentSummary.nearExpiryConsents()));
         
         // Test consent withdrawal
         final var withdrawResult = consentService.withdrawConsent(customerId, 
             new ConsentType.Marketing(), "192.168.1.100");
-        System.out.println("  • Marketing Consent Withdrawn: %s".formatted(withdrawResult ? "✅" : "❌"));
+        LOGGER.info("  • Marketing Consent Withdrawn: %s".formatted(withdrawResult ? "✅" : "❌"));
         
         Thread.sleep(1000);
         
-        System.out.println("\n📤 Demo 3: Subject Access Requests (GDPR Rights)");
-        System.out.println("-".repeat(60));
+        LOGGER.info("\n📤 Demo 3: Subject Access Requests (GDPR Rights)");
+        LOGGER.info("-".repeat(60));
         
         // Submit data export request
         final var exportRequest = sarService.submitAccessRequest(
             customerId, "EXPORT", "192.168.1.100", "Email Verification").get();
-        System.out.println("📥 Data Export Request: %s".formatted(exportRequest.requestId()));
-        System.out.println("  • Status: %s".formatted(exportRequest.status()));
-        System.out.println("  • Processing Time: %d ms".formatted(exportRequest.getProcessingTime().toMillis()));
+        LOGGER.info("📥 Data Export Request: %s".formatted(exportRequest.requestId()));
+        LOGGER.info("  • Status: %s".formatted(exportRequest.status()));
+        LOGGER.info("  • Processing Time: %d ms".formatted(exportRequest.getProcessingTime().toMillis()));
         
         // Submit deletion request (Right to be Forgotten)
         final var deleteRequest = sarService.submitAccessRequest(
             customerId, "DELETE", "192.168.1.100", "Email Verification").get();
-        System.out.println("🗑️ Data Deletion Request: %s".formatted(deleteRequest.requestId()));
-        System.out.println("  • Status: %s".formatted(deleteRequest.status()));
+        LOGGER.info("🗑️ Data Deletion Request: %s".formatted(deleteRequest.requestId()));
+        LOGGER.info("  • Status: %s".formatted(deleteRequest.status()));
         
         Thread.sleep(1000);
         
-        System.out.println("\n📊 Demo 4: Audit Trail & Compliance Logging");
-        System.out.println("-".repeat(60));
+        LOGGER.info("\n📊 Demo 4: Audit Trail & Compliance Logging");
+        LOGGER.info("-".repeat(60));
         
         final var auditEvents = auditService.getAuditEvents(customerId);
-        System.out.println("📋 Audit Events for Customer %s:".formatted(customerId));
+        LOGGER.info("📋 Audit Events for Customer %s:".formatted(customerId));
         auditEvents.stream().limit(5).forEach(event -> 
-            System.out.println("  • %s: %s - %s".formatted(
+            LOGGER.info("  • %s: %s - %s".formatted(
                 event.timestamp().format(DateTimeFormatter.ofPattern("HH:mm:ss")),
                 event.operation().getDisplayName(),
                 event.details())));
         
         if (auditEvents.size() > 5) {
-            System.out.println("  • ... and %d more events".formatted(auditEvents.size() - 5));
+            LOGGER.info("  • ... and %d more events".formatted(auditEvents.size() - 5));
         }
     }
     
@@ -2828,8 +2828,8 @@ public final class OrderConfirmationPdfGenerator {
     private static void demonstratePrivacyByDesignPdf() throws Exception {
         Thread.sleep(1000);
         
-        System.out.println("\n🔒 Demo 5: Privacy-by-Design PDF Generation");
-        System.out.println("-".repeat(60));
+        LOGGER.info("\n🔒 Demo 5: Privacy-by-Design PDF Generation");
+        LOGGER.info("-".repeat(60));
         
         final var sampleOrder = createSampleOrder();
         final var pdfService = new PdfGenerationService();
@@ -2837,17 +2837,17 @@ public final class OrderConfirmationPdfGenerator {
         try {
             // Generate regular PDF
             final var regularPdf = pdfService.generateOrderConfirmation(sampleOrder, false);
-            System.out.println("📄 Regular PDF Generated: %s".formatted(
+            LOGGER.info("📄 Regular PDF Generated: %s".formatted(
                 regularPdf.substring(regularPdf.lastIndexOf('/') + 1)));
             
             // Generate anonymized PDF
             final var anonymizedPdf = pdfService.generateOrderConfirmation(sampleOrder, true);
-            System.out.println("🎭 Anonymized PDF Generated: %s".formatted(
+            LOGGER.info("🎭 Anonymized PDF Generated: %s".formatted(
                 anonymizedPdf.substring(anonymizedPdf.lastIndexOf('/') + 1)));
             
-            System.out.println("✅ Both PDFs generated with appropriate privacy controls");
-            System.out.println("  • Regular: Contains full personal data with privacy notices");
-            System.out.println("  • Anonymized: Uses pseudonymization and masking for privacy protection");
+            LOGGER.info("✅ Both PDFs generated with appropriate privacy controls");
+            LOGGER.info("  • Regular: Contains full personal data with privacy notices");
+            LOGGER.info("  • Anonymized: Uses pseudonymization and masking for privacy protection");
         } finally {
             // Critical: Shutdown internal audit service to prevent resource leak
             pdfService.auditService.shutdown();
@@ -2864,42 +2864,42 @@ public final class OrderConfirmationPdfGenerator {
         
         Thread.sleep(1000);
         
-        System.out.println("\n📈 Demo 6: Compliance Reporting & Monitoring");
-        System.out.println("-".repeat(60));
+        LOGGER.info("\n📈 Demo 6: Compliance Reporting & Monitoring");
+        LOGGER.info("-".repeat(60));
         
         final var reportStart = LocalDateTime.now().minusMinutes(10);
         final var reportEnd = LocalDateTime.now();
         
         final var complianceReport = auditService.generateComplianceReport(reportStart, reportEnd);
         
-        System.out.println("📊 GDPR Compliance Report (%s to %s):".formatted(
+        LOGGER.info("📊 GDPR Compliance Report (%s to %s):".formatted(
             reportStart.format(DateTimeFormatter.ofPattern("HH:mm:ss")),
             reportEnd.format(DateTimeFormatter.ofPattern("HH:mm:ss"))));
         
-        System.out.println("  📈 Audit Metrics:");
-        System.out.println("    • Total Events: %d".formatted(complianceReport.totalEvents()));
-        System.out.println("    • Error Events: %d".formatted(complianceReport.errorEvents()));
-        System.out.println("    • Success Rate: %.2f%%".formatted(
+        LOGGER.info("  📈 Audit Metrics:");
+        LOGGER.info("    • Total Events: %d".formatted(complianceReport.totalEvents()));
+        LOGGER.info("    • Error Events: %d".formatted(complianceReport.errorEvents()));
+        LOGGER.info("    • Success Rate: %.2f%%".formatted(
             (complianceReport.totalEvents() - complianceReport.errorEvents()) * 100.0 / 
             Math.max(1, complianceReport.totalEvents())));
         
-        System.out.println("  🔍 Operations Breakdown:");
+        LOGGER.info("  🔍 Operations Breakdown:");
         complianceReport.operationCounts().forEach((operation, count) ->
-            System.out.println("    • %s: %d events".formatted(operation.getDisplayName(), count)));
+            LOGGER.info("    • %s: %d events".formatted(operation.getDisplayName(), count)));
         
-        System.out.println("  🏷️ Data Classification Breakdown:");
+        LOGGER.info("  🏷️ Data Classification Breakdown:");
         complianceReport.classificationCounts().forEach((classification, count) ->
-            System.out.println("    • %s: %d events".formatted(classification.getDisplayName(), count)));
+            LOGGER.info("    • %s: %d events".formatted(classification.getDisplayName(), count)));
         
         // Check for overdue SAR requests
         final var overdueRequests = sarService.getOverdueRequests();
-        System.out.println("  ⏰ Overdue SAR Requests: %d".formatted(overdueRequests.size()));
+        LOGGER.info("  ⏰ Overdue SAR Requests: %d".formatted(overdueRequests.size()));
         if (!overdueRequests.isEmpty()) {
-            System.out.println("    ⚠️ WARNING: GDPR requires SAR processing within 30 days!");
+            LOGGER.warning("    ⚠️ WARNING: GDPR requires SAR processing within 30 days!");
         }
         
-        System.out.println("\n✅ All GDPR compliance features demonstrated successfully!");
-        System.out.println("🏆 System meets enterprise data protection standards");
+        LOGGER.info("\n✅ All GDPR compliance features demonstrated successfully!");
+        LOGGER.info("🏆 System meets enterprise data protection standards");
     }
     
     /**
@@ -2945,7 +2945,7 @@ public final class OrderConfirmationPdfGenerator {
     }
     
     private static void displayProcessingResult(final ConcurrentOrderProcessor.ProcessingResult result) {
-        System.out.println("""
+        LOGGER.info("""
             ✅ Order Processed: %s
             📄 PDF: %s
             ⏱️ Time: %d ms
@@ -2969,7 +2969,7 @@ public final class OrderConfirmationPdfGenerator {
             .average()
             .orElse(0.0);
         
-        System.out.println("""
+        LOGGER.info("""
             📈 Batch Processing Results:
             ✅ Success: %d/%d orders
             ⏱️ Total Time: %d ms
@@ -2992,7 +2992,7 @@ public final class OrderConfirmationPdfGenerator {
         final var failureCount = results.size() - successCount;
         final var throughput = (results.size() * 1000.0) / totalTime;
         
-        System.out.println("""
+        LOGGER.info("""
             ⚡ High-Throughput Stress Test Results:
             📊 Total Orders: %d
             ✅ Successful: %d
@@ -3014,7 +3014,7 @@ public final class OrderConfirmationPdfGenerator {
         final var metrics = processor.getMetrics();
         final var circuitStats = processor.getCircuitBreakerStats();
         
-        System.out.println("""
+        LOGGER.info("""
             📊 System Performance Metrics:
             🔢 Total Processed: %d orders
             ⚡ Currently Processing: %d
@@ -3036,14 +3036,14 @@ public final class OrderConfirmationPdfGenerator {
         
         // Display operation-specific metrics
         if (!metrics.operationMetrics().isEmpty()) {
-            System.out.println("\n🔍 Operation Breakdown:");
+            LOGGER.info("\n🔍 Operation Breakdown:");
             metrics.operationMetrics().forEach((operation, totalTime) -> 
-                System.out.println("  • %s: %d ms total".formatted(operation, totalTime)));
+                LOGGER.info("  • %s: %d ms total".formatted(operation, totalTime)));
         }
     }
     
     private static void demonstrateResilience(final ConcurrentOrderProcessor processor) {
-        System.out.println("🧪 Testing system resilience with rapid requests...");
+        LOGGER.info("🧪 Testing system resilience with rapid requests...");
         
         final var resilientOrders = createOrderBatch(10); // Reduced for faster demo
         final var futures = new ArrayList<CompletableFuture<ConcurrentOrderProcessor.ProcessingResult>>();
@@ -3072,7 +3072,7 @@ public final class OrderConfirmationPdfGenerator {
                           r.errorMessage().contains("Rate limit") ? 1 : 0)
             .sum();
         
-        System.out.println("""
+        LOGGER.info("""
             🛡️ Resilience Test Results:
             📊 Total Requests: %d
             ✅ Processed: %d
@@ -3087,17 +3087,17 @@ public final class OrderConfirmationPdfGenerator {
     }
     
     private static void displayOrderSummary(final Order order) {
-        System.out.println("\n" + "=".repeat(80));
-        System.out.println("📋 ORDER CONFIRMATION PREVIEW");
-        System.out.println("=".repeat(80));
-        System.out.println("Order ID: " + order.orderId());
-        System.out.println("Customer: " + order.customer().getFullName());
-        System.out.println("Status: " + order.status().getDisplayName());
-        System.out.println("Items: " + order.items().size());
-        System.out.println("Backorders: " + (order.hasBackorderedItems() ? "Yes" : "No"));
-        System.out.println("Split Shipments: " + (order.hasSplitShipments() ? "Yes" : "No"));
-        System.out.println("Grand Total: $%.2f".formatted(order.getGrandTotal()));
-        System.out.println("=".repeat(80));
-        System.out.println("🔄 Processing PDF generation...");
+        LOGGER.info("\n" + "=".repeat(80));
+        LOGGER.info("📋 ORDER CONFIRMATION PREVIEW");
+        LOGGER.info("=".repeat(80));
+        LOGGER.info("Order ID: " + order.orderId());
+        LOGGER.info("Customer: " + order.customer().getFullName());
+        LOGGER.info("Status: " + order.status().getDisplayName());
+        LOGGER.info("Items: " + order.items().size());
+        LOGGER.info("Backorders: " + (order.hasBackorderedItems() ? "Yes" : "No"));
+        LOGGER.info("Split Shipments: " + (order.hasSplitShipments() ? "Yes" : "No"));
+        LOGGER.info("Grand Total: $%.2f".formatted(order.getGrandTotal()));
+        LOGGER.info("=".repeat(80));
+        LOGGER.info("🔄 Processing PDF generation...");
     }
 } 
