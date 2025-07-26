@@ -112,6 +112,18 @@ public final class OrderConfirmationPdfGenerator {
     private static final Pattern SSN_PATTERN = Pattern.compile("\\d{3}-\\d{2}-\\d{4}");
     private static final Pattern CREDIT_CARD_PATTERN = Pattern.compile("\\d{4}[-\\s]?\\d{4}[-\\s]?\\d{4}[-\\s]?\\d{4}");
     
+    // Constants for duplicated literals
+    private static final String CUSTOMER_ID_NULL_MESSAGE = "Customer ID cannot be null";
+    private static final String DELETE_OPERATION = "DELETE";
+    private static final String EXPORT_OPERATION = "EXPORT";
+    private static final String SYSTEM_OPERATOR = "SYSTEM";
+    private static final String COMPLETED_STATUS = "COMPLETED";
+    private static final String CUSTOMER_PREFIX = "CUSTOMER";
+    private static final String CURRENCY_FORMAT = "$%.2f";
+    private static final String TEST_IP_ADDRESS = "192.168.1.100";
+    private static final String TEST_USER_AGENT = "Mozilla/5.0";
+    private static final String TIME_FORMAT_HH_MM_SS = "HH:mm:ss";
+    
     // === Core Domain Models ===
     
     /**
@@ -278,7 +290,7 @@ public final class OrderConfirmationPdfGenerator {
         Address shippingAddress
     ) {
         public Customer {
-            Objects.requireNonNull(customerId, "Customer ID cannot be null");
+            Objects.requireNonNull(customerId, CUSTOMER_ID_NULL_MESSAGE);
             Objects.requireNonNull(firstName, "First name cannot be null");
             Objects.requireNonNull(lastName, "Last name cannot be null");
             Objects.requireNonNull(email, "Email cannot be null");
@@ -607,13 +619,13 @@ public final class OrderConfirmationPdfGenerator {
         }
         
         record Delete() implements DataOperation {
-            @Override public String getDisplayName() { return "DELETE"; }
+            @Override public String getDisplayName() { return DELETE_OPERATION; }
             @Override public boolean requiresAudit() { return true; }
             @Override public DataClassification getMinClassification() { return DataClassification.CONFIDENTIAL; }
         }
         
         record Export() implements DataOperation {
-            @Override public String getDisplayName() { return "EXPORT"; }
+            @Override public String getDisplayName() { return EXPORT_OPERATION; }
             @Override public boolean requiresAudit() { return true; }
             @Override public DataClassification getMinClassification() { return DataClassification.PERSONAL; }
         }
@@ -642,7 +654,7 @@ public final class OrderConfirmationPdfGenerator {
     ) {
         public PrivacyConsent {
             Objects.requireNonNull(consentId, "Consent ID cannot be null");
-            Objects.requireNonNull(customerId, "Customer ID cannot be null");
+            Objects.requireNonNull(customerId, CUSTOMER_ID_NULL_MESSAGE);
             Objects.requireNonNull(consentType, "Consent type cannot be null");
             Objects.requireNonNull(grantedAt, "Granted timestamp cannot be null");
             Objects.requireNonNull(legalBasis, "Legal basis cannot be null");
@@ -696,7 +708,7 @@ public final class OrderConfirmationPdfGenerator {
                 """.formatted(
                     timestamp.format(DATE_FORMATTER),
                     eventId,
-                    customerId != null ? customerId : "SYSTEM",
+                    customerId != null ? customerId : SYSTEM_OPERATOR,
                     operation.getDisplayName(),
                     dataClassification.name(),
                     operatorId,
@@ -724,14 +736,14 @@ public final class OrderConfirmationPdfGenerator {
     ) {
         public SubjectAccessRequest {
             Objects.requireNonNull(requestId, "Request ID cannot be null");
-            Objects.requireNonNull(customerId, "Customer ID cannot be null");
+            Objects.requireNonNull(customerId, CUSTOMER_ID_NULL_MESSAGE);
             Objects.requireNonNull(requestType, "Request type cannot be null");
             Objects.requireNonNull(requestedAt, "Request timestamp cannot be null");
             Objects.requireNonNull(status, "Status cannot be null");
         }
         
         public boolean isCompleted() {
-            return completedAt != null && "COMPLETED".equals(status);
+            return completedAt != null && COMPLETED_STATUS.equals(status);
         }
         
         public Duration getProcessingTime() {
@@ -989,7 +1001,7 @@ public final class OrderConfirmationPdfGenerator {
             );
             
             // Store in memory for immediate access
-            auditLog.computeIfAbsent(customerId != null ? customerId : "SYSTEM", k -> new ArrayList<>())
+            auditLog.computeIfAbsent(customerId != null ? customerId : SYSTEM_OPERATOR, k -> new ArrayList<>())
                    .add(event);
             
             // Log to standard logger
@@ -1140,7 +1152,7 @@ public final class OrderConfirmationPdfGenerator {
             
             auditService.logDataProtectionEvent(
                 customerId, new DataOperation.Create(), DataClassification.PERSONAL,
-                "CUSTOMER", ipAddress, "Consent granted: " + consentType.getDisplayName(),
+                CUSTOMER_PREFIX, ipAddress, "Consent granted: " + consentType.getDisplayName(),
                 true, null
             );
             
@@ -1170,7 +1182,7 @@ public final class OrderConfirmationPdfGenerator {
             
             auditService.logDataProtectionEvent(
                 customerId, new DataOperation.Update(), DataClassification.PERSONAL,
-                "CUSTOMER", ipAddress, "Consent withdrawn: " + consentType.getDisplayName(),
+                CUSTOMER_PREFIX, ipAddress, "Consent withdrawn: " + consentType.getDisplayName(),
                 true, null
             );
             
@@ -1271,7 +1283,7 @@ public final class OrderConfirmationPdfGenerator {
             
             auditService.logDataProtectionEvent(
                 customerId, new DataOperation.Create(), DataClassification.PERSONAL,
-                "CUSTOMER", requestorIpAddress, "Subject access request submitted: " + requestType,
+                CUSTOMER_PREFIX, requestorIpAddress, "Subject access request submitted: " + requestType,
                 true, null
             );
             
@@ -1285,8 +1297,8 @@ public final class OrderConfirmationPdfGenerator {
         private SubjectAccessRequest processAccessRequest(final SubjectAccessRequest request) {
             try {
                 final var result = switch (request.requestType().toUpperCase()) {
-                    case "EXPORT" -> processDataExportRequest(request);
-                    case "DELETE" -> processDataDeletionRequest(request);
+                    case EXPORT_OPERATION -> processDataExportRequest(request);
+                    case DELETE_OPERATION -> processDataDeletionRequest(request);
                     case "CORRECT" -> processDataCorrectionRequest(request);
                     case "RESTRICT" -> processDataRestrictionRequest(request);
                     default -> updateRequestStatus(request, "REJECTED", "Unknown request type");
@@ -1294,7 +1306,7 @@ public final class OrderConfirmationPdfGenerator {
                 
                 auditService.logDataProtectionEvent(
                     request.customerId(), new DataOperation.Update(), DataClassification.PERSONAL,
-                    "SYSTEM", null, "SAR processed: " + request.requestType(),
+                    SYSTEM_OPERATOR, null, "SAR processed: " + request.requestType(),
                     result.isCompleted(), null
                 );
                 
@@ -1305,7 +1317,7 @@ public final class OrderConfirmationPdfGenerator {
                 
                 auditService.logDataProtectionEvent(
                     request.customerId(), new DataOperation.Update(), DataClassification.PERSONAL,
-                    "SYSTEM", null, "SAR processing failed: " + request.requestType(),
+                    SYSTEM_OPERATOR, null, "SAR processing failed: " + request.requestType(),
                     false, e.getMessage()
                 );
                 
@@ -1332,7 +1344,7 @@ public final class OrderConfirmationPdfGenerator {
                     writer.write(customerData);
                 }
                 
-                return updateRequestStatus(request, "COMPLETED", exportFile.getAbsolutePath());
+                return updateRequestStatus(request, COMPLETED_STATUS, exportFile.getAbsolutePath());
                 
             } catch (IOException e) {
                 throw new RuntimeException("Data export failed", e);
@@ -1342,7 +1354,7 @@ public final class OrderConfirmationPdfGenerator {
         private SubjectAccessRequest processDataDeletionRequest(final SubjectAccessRequest request) {
             // Implement right to be forgotten
             final var deletionSummary = performDataDeletion(request.customerId());
-            return updateRequestStatus(request, "COMPLETED", 
+            return updateRequestStatus(request, COMPLETED_STATUS, 
                 "Data deletion completed: " + deletionSummary);
         }
         
@@ -1354,7 +1366,7 @@ public final class OrderConfirmationPdfGenerator {
         
         private SubjectAccessRequest processDataRestrictionRequest(final SubjectAccessRequest request) {
             // Mark data for processing restriction
-            return updateRequestStatus(request, "COMPLETED", 
+            return updateRequestStatus(request, COMPLETED_STATUS, 
                 "Data processing restriction applied");
         }
         
@@ -1663,15 +1675,15 @@ public final class OrderConfirmationPdfGenerator {
             final var table = new Table(UnitValue.createPercentArray(new float[]{3, 1}));
             table.setWidth(UnitValue.createPercentValue(100));
             
-            addSummaryRow(table, "Subtotal:", "$%.2f".formatted(order.getSubtotal()));
+            addSummaryRow(table, "Subtotal:", CURRENCY_FORMAT.formatted(order.getSubtotal()));
             
             if (order.getTotalDiscount().compareTo(ZERO) > 0) {
                 addSummaryRow(table, "Discount:", "-$%.2f".formatted(order.getTotalDiscount()));
             }
             
-            addSummaryRow(table, "Tax:", "$%.2f".formatted(order.getTaxAmount()));
-            addSummaryRow(table, "Shipping:", "$%.2f".formatted(order.shippingCost()));
-            addSummaryRow(table, "TOTAL:", "$%.2f".formatted(order.getGrandTotal()));
+            addSummaryRow(table, "Tax:", CURRENCY_FORMAT.formatted(order.getTaxAmount()));
+            addSummaryRow(table, "Shipping:", CURRENCY_FORMAT.formatted(order.shippingCost()));
+            addSummaryRow(table, "TOTAL:", CURRENCY_FORMAT.formatted(order.getGrandTotal()));
             
             document.add(table);
         }
@@ -1701,8 +1713,8 @@ public final class OrderConfirmationPdfGenerator {
                                                          %s
                                                          """.formatted(item.productName(), item.description()))));
                 table.addCell(new Cell().add(new Paragraph(String.valueOf(item.quantity()))));
-                table.addCell(new Cell().add(new Paragraph("$%.2f".formatted(item.unitPrice()))));
-                table.addCell(new Cell().add(new Paragraph("$%.2f".formatted(item.getTotalPrice()))));
+                table.addCell(new Cell().add(new Paragraph(CURRENCY_FORMAT.formatted(item.unitPrice()))));
+                table.addCell(new Cell().add(new Paragraph(CURRENCY_FORMAT.formatted(item.getTotalPrice()))));
                 table.addCell(new Cell().add(new Paragraph(item.isBackordered() ? "BACKORDER" : "IN STOCK")));
             });
             
@@ -2766,11 +2778,11 @@ public final class OrderConfirmationPdfGenerator {
         
         // Grant various consents
         consentService.grantConsent(customerId, new ConsentType.Essential(), 
-            "192.168.1.100", "Mozilla/5.0", Duration.ofDays(365));
+            TEST_IP_ADDRESS, TEST_USER_AGENT, Duration.ofDays(365));
         consentService.grantConsent(customerId, new ConsentType.Marketing(), 
-            "192.168.1.100", "Mozilla/5.0", Duration.ofDays(180));
+            TEST_IP_ADDRESS, TEST_USER_AGENT, Duration.ofDays(180));
         consentService.grantConsent(customerId, new ConsentType.Analytics(), 
-            "192.168.1.100", "Mozilla/5.0", Duration.ofDays(90));
+            TEST_IP_ADDRESS, TEST_USER_AGENT, Duration.ofDays(90));
         
         final var consentSummary = consentService.getConsentSummary(customerId);
         LOGGER.info("📊 Consent Summary for %s:".formatted(customerId));
@@ -2781,7 +2793,7 @@ public final class OrderConfirmationPdfGenerator {
         
         // Test consent withdrawal
         final var withdrawResult = consentService.withdrawConsent(customerId, 
-            new ConsentType.Marketing(), "192.168.1.100");
+            new ConsentType.Marketing(), TEST_IP_ADDRESS);
         LOGGER.info("  • Marketing Consent Withdrawn: %s".formatted(withdrawResult ? "✅" : "❌"));
         
         Thread.sleep(1000);
@@ -2791,14 +2803,14 @@ public final class OrderConfirmationPdfGenerator {
         
         // Submit data export request
         final var exportRequest = sarService.submitAccessRequest(
-            customerId, "EXPORT", "192.168.1.100", "Email Verification").get();
+            customerId, EXPORT_OPERATION, TEST_IP_ADDRESS, "Email Verification").get();
         LOGGER.info("📥 Data Export Request: %s".formatted(exportRequest.requestId()));
         LOGGER.info("  • Status: %s".formatted(exportRequest.status()));
         LOGGER.info("  • Processing Time: %d ms".formatted(exportRequest.getProcessingTime().toMillis()));
         
         // Submit deletion request (Right to be Forgotten)
         final var deleteRequest = sarService.submitAccessRequest(
-            customerId, "DELETE", "192.168.1.100", "Email Verification").get();
+            customerId, DELETE_OPERATION, TEST_IP_ADDRESS, "Email Verification").get();
         LOGGER.info("🗑️ Data Deletion Request: %s".formatted(deleteRequest.requestId()));
         LOGGER.info("  • Status: %s".formatted(deleteRequest.status()));
         
@@ -2811,7 +2823,7 @@ public final class OrderConfirmationPdfGenerator {
         LOGGER.info("📋 Audit Events for Customer %s:".formatted(customerId));
         auditEvents.stream().limit(5).forEach(event -> 
             LOGGER.info("  • %s: %s - %s".formatted(
-                event.timestamp().format(DateTimeFormatter.ofPattern("HH:mm:ss")),
+                event.timestamp().format(DateTimeFormatter.ofPattern(TIME_FORMAT_HH_MM_SS)),
                 event.operation().getDisplayName(),
                 event.details())));
         
@@ -2871,8 +2883,8 @@ public final class OrderConfirmationPdfGenerator {
         final var complianceReport = auditService.generateComplianceReport(reportStart, reportEnd);
         
         LOGGER.info("📊 GDPR Compliance Report (%s to %s):".formatted(
-            reportStart.format(DateTimeFormatter.ofPattern("HH:mm:ss")),
-            reportEnd.format(DateTimeFormatter.ofPattern("HH:mm:ss"))));
+            reportStart.format(DateTimeFormatter.ofPattern(TIME_FORMAT_HH_MM_SS)),
+            reportEnd.format(DateTimeFormatter.ofPattern(TIME_FORMAT_HH_MM_SS))));
         
         LOGGER.info("  📈 Audit Metrics:");
         LOGGER.info("    • Total Events: %d".formatted(complianceReport.totalEvents()));
