@@ -12,6 +12,8 @@ import com.itextpdf.layout.element.Table;
 import com.itextpdf.layout.properties.TextAlignment;
 import com.itextpdf.layout.properties.UnitValue;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import java.util.stream.Collectors;
+
 
 import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
@@ -31,7 +33,6 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Logger;
-import java.util.stream.Collectors;
 
 // === Data Protection & Privacy Imports ===
 import java.nio.charset.StandardCharsets;
@@ -77,6 +78,23 @@ import javax.crypto.spec.SecretKeySpec;
  */
 public final class OrderConfirmationPdfGenerator {
 
+    // === Custom Exceptions for Better Error Handling ===
+    
+    public static final class EncryptionException extends RuntimeException {
+        public EncryptionException(String message) { super(message); }
+        public EncryptionException(String message, Throwable cause) { super(message, cause); }
+    }
+
+    public static final class PdfGenerationException extends RuntimeException {
+        public PdfGenerationException(String message) { super(message); }
+        public PdfGenerationException(String message, Throwable cause) { super(message, cause); }
+    }
+
+    public static final class DataProcessingException extends RuntimeException {
+        public DataProcessingException(String message) { super(message); }
+        public DataProcessingException(String message, Throwable cause) { super(message, cause); }
+    }
+
     // === Constants and Configuration ===
     
     private static final Logger LOGGER = Logger.getLogger(OrderConfirmationPdfGenerator.class.getName());
@@ -103,7 +121,7 @@ public final class OrderConfirmationPdfGenerator {
     private static final Duration DEFAULT_DATA_RETENTION_PERIOD = Duration.ofDays(2555); // 7 years
     private static final Duration GDPR_DELETION_GRACE_PERIOD = Duration.ofDays(30);
     private static final Duration AUDIT_LOG_RETENTION = Duration.ofDays(3653); // 10 years
-    private static final String ANONYMIZATION_SALT = "E-COMMERCE-PRIVACY-2024";
+    private static final String ANONYMIZATION_SALT = System.getenv("ANONYMIZATION_SALT");
     private static final int PSEUDONYMIZATION_LENGTH = 12;
     private static final String AUDIT_LOG_DIRECTORY = "audit-logs";
     private static final String EXPORT_DIRECTORY = "data-exports";
@@ -123,6 +141,24 @@ public final class OrderConfirmationPdfGenerator {
     private static final String TEST_IP_ADDRESS = "192.168.1.100";
     private static final String TEST_USER_AGENT = "Mozilla/5.0";
     private static final String TIME_FORMAT_HH_MM_SS = "HH:mm:ss";
+    
+    // Static template constants for text blocks
+    private static final String SHIPMENT_INFO_TEMPLATE = """
+                           Shipment ID: %s
+                           Tracking Number: %s
+                           Carrier: %s
+                           Type: %s
+                           Estimated Delivery: %s
+                           Weight: %.2f lbs
+                           
+                           """;
+    
+    private static final String COUPON_INFO_TEMPLATE = """
+                         Code: %s
+                         Description: %s
+                         Discount: %s
+                         
+                         """;
     
     // === Core Domain Models ===
     
@@ -196,7 +232,7 @@ public final class OrderConfirmationPdfGenerator {
                 }
             }
             @Override public String getDisplayName() { 
-                return "Split Shipment (%d of %d)".formatted(currentPart, totalParts); 
+                return String.format("Split Shipment (%d of %d)", currentPart, totalParts); 
             }
             @Override public boolean requiresSpecialHandling() { return true; }
         }
@@ -206,7 +242,7 @@ public final class OrderConfirmationPdfGenerator {
                 Objects.requireNonNull(expectedDate, "Expected date cannot be null");
             }
             @Override public String getDisplayName() { 
-                return "Backorder (Expected: %s)".formatted(expectedDate.format(DATE_FORMATTER)); 
+                return String.format("Backorder (Expected: %s)", expectedDate.format(DATE_FORMATTER)); 
             }
             @Override public boolean requiresSpecialHandling() { return true; }
         }
@@ -234,7 +270,7 @@ public final class OrderConfirmationPdfGenerator {
                 }
             }
             @Override public String getDisplayName() { 
-                return "%s%% Off".formatted(percent.stripTrailingZeros().toPlainString()); 
+                return String.format("%s%% Off", percent.stripTrailingZeros().toPlainString()); 
             }
             @Override public BigDecimal calculateDiscount(final BigDecimal orderTotal, final BigDecimal shippingCost) {
                 return orderTotal.multiply(percent).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
@@ -249,7 +285,7 @@ public final class OrderConfirmationPdfGenerator {
                 }
             }
             @Override public String getDisplayName() { 
-                return "$%s Off".formatted(amount.stripTrailingZeros().toPlainString()); 
+                return String.format("$%s Off", amount.stripTrailingZeros().toPlainString()); 
             }
             @Override public BigDecimal calculateDiscount(final BigDecimal orderTotal, final BigDecimal shippingCost) {
                 return amount.min(orderTotal);
@@ -268,7 +304,7 @@ public final class OrderConfirmationPdfGenerator {
                 Objects.requireNonNull(applicableCategory, "Category cannot be null");
             }
             @Override public String getDisplayName() { 
-                return "BOGO - %s".formatted(applicableCategory); 
+                return String.format("BOGO - %s", applicableCategory); 
             }
             @Override public BigDecimal calculateDiscount(final BigDecimal orderTotal, final BigDecimal shippingCost) {
                 // Simplified BOGO calculation - in real system would need item-level logic
@@ -301,7 +337,7 @@ public final class OrderConfirmationPdfGenerator {
         }
         
         public String getFullName() {
-            return "%s %s".formatted(firstName, lastName);
+            return String.format("%s %s", firstName, lastName);
         }
         
         private static void validateEmail(final String email) {
@@ -336,16 +372,16 @@ public final class OrderConfirmationPdfGenerator {
         }
         
         public String getFormattedAddress() {
-            return """
+            return String.format("""
                    %s
                    %s, %s %s
                    %s
-                   """.formatted(street, city, state, zipCode, country);
+                   """, street, city, state, zipCode, country);
         }
         
         private static void validateNonEmpty(final String value, final String fieldName) {
             if (value.trim().isEmpty()) {
-                throw new IllegalArgumentException("%s cannot be empty".formatted(fieldName));
+                throw new IllegalArgumentException(String.format("%s cannot be empty", fieldName));
             }
         }
     }
@@ -702,10 +738,10 @@ public final class OrderConfirmationPdfGenerator {
         }
         
         public String toLogEntry() {
-            return """
+            return String.format("""
                 [%s] EVENT_ID=%s CUSTOMER=%s OPERATION=%s CLASSIFICATION=%s OPERATOR=%s IP=%s SUCCESS=%s%s
                 Details: %s
-                """.formatted(
+                """,
                     timestamp.format(DATE_FORMATTER),
                     eventId,
                     customerId != null ? customerId : SYSTEM_OPERATOR,
@@ -813,35 +849,63 @@ public final class OrderConfirmationPdfGenerator {
         /**
          * Encrypts sensitive customer data for secure PDF storage
          */
-        public EncryptedData encryptSensitiveData(final String data) throws Exception {
-            final var cipher = Cipher.getInstance(ENCRYPTION_ALGORITHM);
-            final var iv = new byte[16];
-            SECURE_RANDOM.nextBytes(iv);
-            final var ivSpec = new IvParameterSpec(iv);
-            
-            cipher.init(Cipher.ENCRYPT_MODE, secretKey, ivSpec);
-            final var encryptedBytes = cipher.doFinal(data.getBytes());
-            
-            return new EncryptedData(encryptedBytes, iv);
+        public EncryptedData encryptSensitiveData(final String data) throws EncryptionException {
+            try {
+                final var cipher = Cipher.getInstance(ENCRYPTION_ALGORITHM);
+                final var iv = new byte[16]; // CBC uses 16 bytes
+                SECURE_RANDOM.nextBytes(iv);
+                final var ivSpec = new IvParameterSpec(iv);
+                
+                cipher.init(Cipher.ENCRYPT_MODE, secretKey, ivSpec);
+                final var encryptedBytes = cipher.doFinal(data.getBytes());
+                
+                return new EncryptedData(encryptedBytes, iv);
+            } catch (Exception e) {
+                throw new EncryptionException("Failed to encrypt sensitive data", e);
+            }
         }
         
         /**
          * Decrypts sensitive data for processing
          */
-        public String decryptSensitiveData(final EncryptedData encryptedData) throws Exception {
-            final var cipher = Cipher.getInstance(ENCRYPTION_ALGORITHM);
-            final var ivSpec = new IvParameterSpec(encryptedData.iv());
-            
-            cipher.init(Cipher.DECRYPT_MODE, secretKey, ivSpec);
-            final var decryptedBytes = cipher.doFinal(encryptedData.data());
-            
-            return new String(decryptedBytes);
+        public String decryptSensitiveData(final EncryptedData encryptedData) throws EncryptionException {
+            try {
+                final var cipher = Cipher.getInstance(ENCRYPTION_ALGORITHM);
+                final var ivSpec = new IvParameterSpec(encryptedData.iv());
+                
+                cipher.init(Cipher.DECRYPT_MODE, secretKey, ivSpec);
+                final var decryptedBytes = cipher.doFinal(encryptedData.data());
+                
+                return new String(decryptedBytes);
+            } catch (Exception e) {
+                throw new EncryptionException("Failed to decrypt sensitive data", e);
+            }
         }
         
         public record EncryptedData(byte[] data, byte[] iv) {
             public EncryptedData {
                 Objects.requireNonNull(data, "Encrypted data cannot be null");
                 Objects.requireNonNull(iv, "IV cannot be null");
+            }
+            
+            @Override
+            public boolean equals(Object obj) {
+                if (this == obj) return true;
+                if (obj == null || getClass() != obj.getClass()) return false;
+                EncryptedData that = (EncryptedData) obj;
+                return Arrays.equals(data, that.data) && Arrays.equals(iv, that.iv);
+            }
+            
+            @Override
+            public int hashCode() {
+                int result = Arrays.hashCode(data);
+                result = 31 * result + Arrays.hashCode(iv);
+                return result;
+            }
+            
+            @Override
+            public String toString() {
+                return "EncryptedData{data.length=" + data.length + ", iv.length=" + iv.length + "}";
             }
         }
     }
@@ -892,6 +956,12 @@ public final class OrderConfirmationPdfGenerator {
         public String pseudonymizeData(final String data, final String context) {
             if (data == null || data.trim().isEmpty()) return data;
             
+            // Handle null ANONYMIZATION_SALT
+            if (ANONYMIZATION_SALT == null) {
+                LOGGER.severe("ANONYMIZATION_SALT environment variable not set");
+                return maskString(data);
+            }
+            
             final var cacheKey = context + ":" + data;
             return pseudonymizationCache.computeIfAbsent(cacheKey, k -> {
                 try {
@@ -905,8 +975,8 @@ public final class OrderConfirmationPdfGenerator {
                     
                     return pseudonym.substring(0, Math.min(PSEUDONYMIZATION_LENGTH, pseudonym.length()));
                     
-                } catch (Exception e) {
-                    LOGGER.severe("Pseudonymization failed: " + e.getMessage());
+                } catch (Exception _) {
+                    LOGGER.severe("Pseudonymization failed");
                     return maskString(data);
                 }
             });
@@ -940,11 +1010,11 @@ public final class OrderConfirmationPdfGenerator {
         }
         
         private String generateAnonymousEmail() {
-            return "user%d@anonymized.com".formatted(Math.abs(secureRandom.nextInt()));
+            return String.format("user%d@anonymized.com", Math.abs(secureRandom.nextInt()));
         }
         
         private String generateAnonymousPhone() {
-            return "(555) %03d-%04d".formatted(
+            return String.format("(555) %03d-%04d", 
                 secureRandom.nextInt(1000), 
                 secureRandom.nextInt(10000)
             );
@@ -989,19 +1059,16 @@ public final class OrderConfirmationPdfGenerator {
         /**
          * Log data protection event for compliance audit trail
          */
-        public void logDataProtectionEvent(final String customerId, final DataOperation operation,
-                                         final DataClassification classification, final String operatorId,
-                                         final String ipAddress, final String details, final boolean successful,
-                                         final String errorMessage) {
+        public void logDataProtectionEvent(final AuditEventRequest request) {
             
             final var eventId = "AUDIT-" + eventCounter.incrementAndGet() + "-" + System.currentTimeMillis();
             final var event = new DataProtectionAuditEvent(
-                eventId, customerId, operation, classification, LocalDateTime.now(),
-                operatorId, ipAddress, details, successful, errorMessage
+                eventId, request.customerId(), request.operation(), request.classification(), LocalDateTime.now(),
+                request.operatorId(), request.ipAddress(), request.details(), request.successful(), request.errorMessage()
             );
             
             // Store in memory for immediate access
-            auditLog.computeIfAbsent(customerId != null ? customerId : SYSTEM_OPERATOR, k -> new ArrayList<>())
+            auditLog.computeIfAbsent(request.customerId() != null ? request.customerId() : SYSTEM_OPERATOR, k -> new ArrayList<>())
                    .add(event);
             
             // Log to standard logger
@@ -1010,6 +1077,28 @@ public final class OrderConfirmationPdfGenerator {
             // Async persistence
             auditExecutor.submit(() -> persistEvent(event));
         }
+        
+        /**
+         * Log data protection event for compliance audit trail (legacy method)
+         */
+        public void logDataProtectionEvent(final String customerId, final DataOperation operation,
+                                         final DataClassification classification, final String operatorId,
+                                         final String ipAddress, final String details, final boolean successful,
+                                         final String errorMessage) {
+            logDataProtectionEvent(new AuditEventRequest(customerId, operation, classification, operatorId, 
+                                                       ipAddress, details, successful, errorMessage));
+        }
+        
+        public record AuditEventRequest(
+            String customerId,
+            DataOperation operation,
+            DataClassification classification,
+            String operatorId,
+            String ipAddress,
+            String details,
+            boolean successful,
+            String errorMessage
+        ) {}
         
         /**
          * Retrieve audit events for specific customer
@@ -1025,7 +1114,7 @@ public final class OrderConfirmationPdfGenerator {
             return auditLog.values().stream()
                           .flatMap(java.util.List::stream)
                           .filter(event -> event.operation().equals(operation))
-                          .collect(Collectors.toList());
+                          .toList();
         }
         
         /**
@@ -1037,7 +1126,7 @@ public final class OrderConfirmationPdfGenerator {
                                       .flatMap(java.util.List::stream)
                                       .filter(event -> event.timestamp().isAfter(fromDate) && 
                                                      event.timestamp().isBefore(toDate))
-                                      .collect(Collectors.toList());
+                                      .toList();
             
             final var operationCounts = events.stream()
                                              .collect(Collectors.groupingBy(
@@ -1068,7 +1157,7 @@ public final class OrderConfirmationPdfGenerator {
                 }
                 
                 final var logFile = new File(auditDir, 
-                    "audit_" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd")) + ".log");
+                    String.format("audit_%s.log", LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))));
                 
                 try (var writer = new FileWriter(logFile, true)) {
                     writer.write(event.toLogEntry());
@@ -1077,12 +1166,13 @@ public final class OrderConfirmationPdfGenerator {
                 
             } catch (IOException e) {
                 LOGGER.severe("Failed to persist audit event: " + e.getMessage());
+                throw new DataProcessingException("Audit event persistence failed", e);
             }
         }
         
         private void persistAuditLogs() {
-            LOGGER.info("Persisting audit logs - total events in memory: " + 
-                       auditLog.values().stream().mapToInt(java.util.List::size).sum());
+            LOGGER.info(String.format("Persisting audit logs - total events in memory: %d", 
+                auditLog.values().stream().mapToInt(java.util.List::size).sum()));
         }
         
         private void cleanupOldLogs() {
@@ -1091,7 +1181,7 @@ public final class OrderConfirmationPdfGenerator {
             auditLog.values().forEach(events -> 
                 events.removeIf(event -> event.timestamp().isBefore(cutoffDate)));
             
-            LOGGER.info("Cleaned up audit logs older than " + cutoffDate);
+            LOGGER.info(String.format("Cleaned up audit logs older than %s", cutoffDate));
         }
         
         public void shutdown() {
@@ -1152,7 +1242,7 @@ public final class OrderConfirmationPdfGenerator {
             
             auditService.logDataProtectionEvent(
                 customerId, new DataOperation.Create(), DataClassification.PERSONAL,
-                CUSTOMER_PREFIX, ipAddress, "Consent granted: " + consentType.getDisplayName(),
+                CUSTOMER_PREFIX, ipAddress, String.format("Consent granted: %s", consentType.getDisplayName()),
                 true, null
             );
             
@@ -1182,7 +1272,7 @@ public final class OrderConfirmationPdfGenerator {
             
             auditService.logDataProtectionEvent(
                 customerId, new DataOperation.Update(), DataClassification.PERSONAL,
-                CUSTOMER_PREFIX, ipAddress, "Consent withdrawn: " + consentType.getDisplayName(),
+                CUSTOMER_PREFIX, ipAddress, String.format("Consent withdrawn: %s", consentType.getDisplayName()),
                 true, null
             );
             
@@ -1347,7 +1437,7 @@ public final class OrderConfirmationPdfGenerator {
                 return updateRequestStatus(request, COMPLETED_STATUS, exportFile.getAbsolutePath());
                 
             } catch (IOException e) {
-                throw new RuntimeException("Data export failed", e);
+                throw new DataProcessingException("Data export failed", e);
             }
         }
         
@@ -1406,7 +1496,7 @@ public final class OrderConfirmationPdfGenerator {
                 // Simple JSON serialization (in production, use Jackson or similar)
                 return exportData.toString();
             } catch (Exception e) {
-                throw new RuntimeException("JSON export generation failed", e);
+                throw new DataProcessingException("JSON export generation failed", e);
             }
         }
         
@@ -1426,7 +1516,7 @@ public final class OrderConfirmationPdfGenerator {
         public java.util.List<SubjectAccessRequest> getOverdueRequests() {
             return accessRequests.values().stream()
                                 .filter(SubjectAccessRequest::isOverdue)
-                                .collect(Collectors.toList());
+                                .toList();
         }
         
         public void shutdown() {
@@ -1473,7 +1563,7 @@ public final class OrderConfirmationPdfGenerator {
                     return generateOrderConfirmation(order);
                 } catch (Exception e) {
                     LOGGER.severe("Failed to generate PDF for order: " + order.orderId() + " - " + e.getMessage());
-                    throw new RuntimeException("PDF generation failed", e);
+                    throw new PdfGenerationException("PDF generation failed", e);
                 }
             });
         }
@@ -1481,14 +1571,14 @@ public final class OrderConfirmationPdfGenerator {
         /**
          * Main PDF generation method with GDPR compliance and privacy-by-design
          */
-        public String generateOrderConfirmation(final Order order) throws Exception {
+        public String generateOrderConfirmation(final Order order) throws PdfGenerationException {
             return generateOrderConfirmation(order, false); // Default to non-anonymized
         }
         
         /**
          * Generate PDF with optional data anonymization for privacy compliance
          */
-        public String generateOrderConfirmation(final Order order, final boolean anonymizeData) throws Exception {
+        public String generateOrderConfirmation(final Order order, final boolean anonymizeData) throws PdfGenerationException {
             // Audit logging for PDF generation
             auditService.logDataProtectionEvent(
                 order.customer().customerId(), new DataOperation.Create(), 
@@ -1502,7 +1592,7 @@ public final class OrderConfirmationPdfGenerator {
                 outputDir.mkdirs();
             }
             
-            final var filename = "%s/order_confirmation_%s_%s%s.pdf".formatted(
+            final var filename = String.format("%s/order_confirmation_%s_%s%s.pdf",
                 OUTPUT_DIRECTORY,
                 order.orderId(),
                 LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")),
@@ -1526,6 +1616,8 @@ public final class OrderConfirmationPdfGenerator {
                 addPrivacyCompliantFooter(document, processedOrder, anonymizeData);
                 
                 document.close();
+            } catch (Exception e) {
+                throw new PdfGenerationException("Failed to generate PDF", e);
             }
             
             // Audit successful generation
@@ -1535,7 +1627,7 @@ public final class OrderConfirmationPdfGenerator {
                 "PDF generated successfully: " + filename, true, null
             );
             
-            LOGGER.info("Generated %s PDF for order: %s".formatted(
+            LOGGER.info(String.format("Generated %s PDF for order: %s",
                 anonymizeData ? "anonymized" : "full", order.orderId()));
             return filename;
         }
@@ -1566,7 +1658,7 @@ public final class OrderConfirmationPdfGenerator {
             );
         }
         
-        private void addPrivacyCompliantHeader(final Document document, final Order order, final boolean anonymized) throws Exception {
+        private void addPrivacyCompliantHeader(final Document document, final Order order, final boolean anonymized) {
             final var headerText = anonymized ? 
                 """
                 ORDER CONFIRMATION (ANONYMIZED)
@@ -1591,12 +1683,12 @@ public final class OrderConfirmationPdfGenerator {
             document.add(header);
             document.add(new LineSeparator(new SolidLine()));
             
-            final var orderInfo = """
+            final var orderInfo = String.format("""
                                  Order ID: %s
                                  Order Date: %s
                                  Status: %s
                                  Data Classification: %s
-                                 """.formatted(
+                                 """,
                                      order.orderId(),
                                      order.orderDate().format(DATE_FORMATTER),
                                      order.status().getDisplayName(),
@@ -1617,11 +1709,7 @@ public final class OrderConfirmationPdfGenerator {
             }
         }
         
-        private void addHeader(final Document document, final Order order) throws Exception {
-            addPrivacyCompliantHeader(document, order, false);
-        }
-        
-        private void addPrivacyCompliantCustomerInformation(final Document document, final Customer customer, final boolean anonymized) throws Exception {
+        private void addPrivacyCompliantCustomerInformation(final Document document, final Customer customer, final boolean anonymized) {
             document.add(new Paragraph("CUSTOMER INFORMATION").setBold().setFontSize(14));
             
             // Detect and classify personal data
@@ -1629,7 +1717,7 @@ public final class OrderConfirmationPdfGenerator {
             final var dataClassification = personalDataDetected.isEmpty() ? 
                 DataClassification.INTERNAL : DataClassification.PERSONAL;
             
-            final var customerInfo = """
+            final var customerInfo = String.format("""
                                    Customer: %s
                                    Email: %s
                                    Phone: %s
@@ -1641,7 +1729,7 @@ public final class OrderConfirmationPdfGenerator {
                                    
                                    Shipping Address:
                                    %s
-                                   """.formatted(
+                                   """,
                                        customer.getFullName(),
                                        customer.email(),
                                        customer.phone() != null ? customer.phone() : "Not provided",
@@ -1665,25 +1753,21 @@ public final class OrderConfirmationPdfGenerator {
             }
         }
         
-        private void addCustomerInformation(final Document document, final Customer customer) throws Exception {
-            addPrivacyCompliantCustomerInformation(document, customer, false);
-        }
-        
         private void addOrderSummary(final Document document, final Order order) {
             document.add(new Paragraph("ORDER SUMMARY").setBold().setFontSize(14));
             
             final var table = new Table(UnitValue.createPercentArray(new float[]{3, 1}));
             table.setWidth(UnitValue.createPercentValue(100));
             
-            addSummaryRow(table, "Subtotal:", CURRENCY_FORMAT.formatted(order.getSubtotal()));
+            addSummaryRow(table, "Subtotal:", String.format(CURRENCY_FORMAT, order.getSubtotal()));
             
             if (order.getTotalDiscount().compareTo(ZERO) > 0) {
-                addSummaryRow(table, "Discount:", "-$%.2f".formatted(order.getTotalDiscount()));
+                addSummaryRow(table, "Discount:", String.format("-$%.2f", order.getTotalDiscount()));
             }
             
-            addSummaryRow(table, "Tax:", CURRENCY_FORMAT.formatted(order.getTaxAmount()));
-            addSummaryRow(table, "Shipping:", CURRENCY_FORMAT.formatted(order.shippingCost()));
-            addSummaryRow(table, "TOTAL:", CURRENCY_FORMAT.formatted(order.getGrandTotal()));
+            addSummaryRow(table, "Tax:", String.format(CURRENCY_FORMAT, order.getTaxAmount()));
+            addSummaryRow(table, "Shipping:", String.format(CURRENCY_FORMAT, order.shippingCost()));
+            addSummaryRow(table, "TOTAL:", String.format(CURRENCY_FORMAT, order.getGrandTotal()));
             
             document.add(table);
         }
@@ -1708,13 +1792,13 @@ public final class OrderConfirmationPdfGenerator {
             
             // Items
             order.items().forEach(item -> {
-                table.addCell(new Cell().add(new Paragraph("""
+                table.addCell(new Cell().add(new Paragraph(String.format("""
                                                          %s
                                                          %s
-                                                         """.formatted(item.productName(), item.description()))));
+                                                         """, item.productName(), item.description()))));
                 table.addCell(new Cell().add(new Paragraph(String.valueOf(item.quantity()))));
-                table.addCell(new Cell().add(new Paragraph(CURRENCY_FORMAT.formatted(item.unitPrice()))));
-                table.addCell(new Cell().add(new Paragraph(CURRENCY_FORMAT.formatted(item.getTotalPrice()))));
+                table.addCell(new Cell().add(new Paragraph(String.format(CURRENCY_FORMAT, item.unitPrice()))));
+                table.addCell(new Cell().add(new Paragraph(String.format(CURRENCY_FORMAT, item.getTotalPrice()))));
                 table.addCell(new Cell().add(new Paragraph(item.isBackordered() ? "BACKORDER" : "IN STOCK")));
             });
             
@@ -1727,22 +1811,14 @@ public final class OrderConfirmationPdfGenerator {
             document.add(new Paragraph("SHIPMENT INFORMATION").setBold().setFontSize(14));
             
             order.shipments().forEach(shipment -> {
-                final var shipmentInfo = """
-                                       Shipment ID: %s
-                                       Tracking Number: %s
-                                       Carrier: %s
-                                       Type: %s
-                                       Estimated Delivery: %s
-                                       Weight: %.2f lbs
-                                       
-                                       """.formatted(
-                                           shipment.shipmentId(),
-                                           shipment.trackingNumber(),
-                                           shipment.carrier(),
-                                           shipment.type().getDisplayName(),
-                                           shipment.estimatedDelivery().format(DATE_FORMATTER),
-                                           shipment.getTotalWeight()
-                                       );
+                final var shipmentInfo = SHIPMENT_INFO_TEMPLATE.formatted(
+                    shipment.shipmentId(),
+                    shipment.trackingNumber(),
+                    shipment.carrier(),
+                    shipment.type().getDisplayName(),
+                    shipment.estimatedDelivery().format(DATE_FORMATTER),
+                    shipment.getTotalWeight()
+                );
                 
                 document.add(new Paragraph(shipmentInfo).setFontSize(10));
             });
@@ -1754,23 +1830,18 @@ public final class OrderConfirmationPdfGenerator {
             document.add(new Paragraph("APPLIED PROMOTIONS").setBold().setFontSize(14));
             
             order.appliedCoupons().forEach(coupon -> {
-                final var couponInfo = """
-                                     Code: %s
-                                     Description: %s
-                                     Discount: %s
-                                     
-                                     """.formatted(
-                                         coupon.couponCode(),
-                                         coupon.description(),
-                                         coupon.type().getDisplayName()
-                                     );
+                final var couponInfo = COUPON_INFO_TEMPLATE.formatted(
+                    coupon.couponCode(),
+                    coupon.description(),
+                    coupon.type().getDisplayName()
+                );
                 
                 document.add(new Paragraph(couponInfo).setFontSize(10));
             });
         }
         
         private void addPrivacyCompliantFooter(final Document document, final Order order, final boolean anonymized) {
-            final var footer = """
+            final var footer = String.format("""
                              
                              Thank you for your business!
                              
@@ -1782,7 +1853,7 @@ public final class OrderConfirmationPdfGenerator {
                              
                              Generated on: %s
                              Document Type: %s
-                             """.formatted(
+                             """,
                                  order.orderId(),
                                  LocalDateTime.now().format(DATE_FORMATTER),
                                  anonymized ? "Anonymized Copy" : "Original with Personal Data"
@@ -1833,10 +1904,6 @@ public final class OrderConfirmationPdfGenerator {
             
             document.add(new Paragraph(privacyFooter).setTextAlignment(TextAlignment.LEFT).setFontSize(7));
         }
-        
-        private void addFooter(final Document document, final Order order) {
-            addPrivacyCompliantFooter(document, order, false);
-        }
     }
     
     // === Business Logic ===
@@ -1868,9 +1935,9 @@ public final class OrderConfirmationPdfGenerator {
                 .whenComplete((result, throwable) -> {
                     final var duration = System.currentTimeMillis() - startTime;
                     if (throwable == null) {
-                        LOGGER.info("Order %s processed successfully in %d ms".formatted(order.orderId(), duration));
+                        LOGGER.info(String.format("Order %s processed successfully in %d ms", order.orderId(), duration));
                     } else {
-                        LOGGER.severe("Order %s processing failed after %d ms: %s".formatted(
+                        LOGGER.severe(String.format("Order %s processing failed after %d ms: %s",
                             order.orderId(), duration, throwable.getMessage()));
                     }
                 });
@@ -1886,10 +1953,10 @@ public final class OrderConfirmationPdfGenerator {
                 // Validate coupon applicability
                 final var invalidCoupons = order.appliedCoupons().stream()
                                                .filter(coupon -> !coupon.isValidAt(order.orderDate()))
-                                               .collect(Collectors.toList());
+                                               .toList();
                 
                 if (!invalidCoupons.isEmpty()) {
-                    LOGGER.warning("Order %s has invalid coupons: %s".formatted(
+                    LOGGER.warning(String.format("Order %s has invalid coupons: %s",
                         order.orderId(), 
                         invalidCoupons.stream().map(Coupon::couponCode).collect(Collectors.joining(", "))
                     ));
@@ -2096,6 +2163,7 @@ public final class OrderConfirmationPdfGenerator {
         private final BlockingQueue<PdfGenerationService> pdfServicePool;
         private final BlockingQueue<EncryptionService> encryptionServicePool;
         private final ScheduledExecutorService cleanupExecutor;
+        private volatile boolean isShutdown = false;
         
         public ResourcePoolManager() throws NoSuchAlgorithmException {
             this.pdfServicePool = new LinkedBlockingQueue<>();
@@ -2126,7 +2194,8 @@ public final class OrderConfirmationPdfGenerator {
                     service = new PdfGenerationService();
                     LOGGER.warning("Created new PDF service due to pool exhaustion");
                 } catch (NoSuchAlgorithmException e) {
-                    throw new RuntimeException("Failed to create PDF service", e);
+                    
+                    throw new DataProcessingException("Failed to create PDF service", e);
                 }
             }
             return service;
@@ -2145,7 +2214,7 @@ public final class OrderConfirmationPdfGenerator {
                     service = new EncryptionService();
                     LOGGER.warning("Created new encryption service due to pool exhaustion");
                 } catch (NoSuchAlgorithmException e) {
-                    throw new RuntimeException("Failed to create encryption service", e);
+                    throw new DataProcessingException("Failed to create encryption service", e);
                 }
             }
             return service;
@@ -2158,11 +2227,14 @@ public final class OrderConfirmationPdfGenerator {
         }
         
         private void performCleanup() {
-            LOGGER.info("Performing resource pool cleanup - PDF pool: %d, Encryption pool: %d"
-                .formatted(pdfServicePool.size(), encryptionServicePool.size()));
+            if (!isShutdown) {
+                LOGGER.info(String.format("Performing resource pool cleanup - PDF pool: %d, Encryption pool: %d",
+                    pdfServicePool.size(), encryptionServicePool.size()));
+            }
         }
         
         public void shutdown() {
+            isShutdown = true;
             cleanupExecutor.shutdown();
             try {
                 if (!cleanupExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
@@ -2240,7 +2312,7 @@ public final class OrderConfirmationPdfGenerator {
             }
             
             if (!circuitBreaker.allowRequest()) {
-                return CompletableFuture.failedFuture(new RuntimeException("Circuit breaker is open"));
+                return CompletableFuture.failedFuture(new PdfGenerationException("Circuit breaker is open"));
             }
             
             final var request = new OrderRequest(order, System.currentTimeMillis());
@@ -2252,7 +2324,7 @@ public final class OrderConfirmationPdfGenerator {
                 } catch (Exception e) {
                     metrics.recordError();
                     circuitBreaker.recordFailure();
-                    throw new RuntimeException("Order processing failed", e);
+                    throw new PdfGenerationException("Order processing failed", e);
                 }
             }, mainExecutor);
         }
@@ -2275,7 +2347,7 @@ public final class OrderConfirmationPdfGenerator {
                 return CompletableFuture.allOf(futures.toArray(new CompletableFuture<?>[0]))
                     .thenApply(v -> futures.stream()
                         .flatMap(f -> f.join().stream())
-                        .collect(Collectors.toList()));
+                        .toList());
             }
             
             // Use parallel CompletableFutures for batch processing
@@ -2283,12 +2355,12 @@ public final class OrderConfirmationPdfGenerator {
                 .map(order -> CompletableFuture.supplyAsync(() -> 
                     processOrderInternal(new OrderRequest(order, System.currentTimeMillis())), 
                     mainExecutor))
-                .collect(Collectors.toList());
+                .toList();
             
             return CompletableFuture.allOf(futures.toArray(new CompletableFuture<?>[0]))
                 .thenApply(v -> futures.stream()
                     .map(CompletableFuture::join)
-                    .collect(Collectors.toList()));
+                    .toList());
         }
         
         private ProcessingResult processOrderInternal(final OrderRequest request) {
@@ -2325,7 +2397,7 @@ public final class OrderConfirmationPdfGenerator {
                 metrics.recordError();
                 circuitBreaker.recordFailure();
                 
-                LOGGER.severe("Failed to process order %s: %s".formatted(
+                LOGGER.severe(String.format("Failed to process order %s: %s",
                     request.order().orderId(), e.getMessage()));
                 
                 return new ProcessingResult(
@@ -2350,10 +2422,10 @@ public final class OrderConfirmationPdfGenerator {
                 // Validate coupons
                 final var invalidCoupons = order.appliedCoupons().stream()
                     .filter(coupon -> !coupon.isValidAt(order.orderDate()))
-                    .collect(Collectors.toList());
+                    .toList();
                 
                 if (!invalidCoupons.isEmpty()) {
-                    LOGGER.warning("Order %s has invalid coupons: %s".formatted(
+                    LOGGER.warning(String.format("Order %s has invalid coupons: %s",
                         order.orderId(),
                         invalidCoupons.stream().map(Coupon::couponCode)
                             .collect(Collectors.joining(", "))));
@@ -2365,7 +2437,7 @@ public final class OrderConfirmationPdfGenerator {
                 return order;
                 
             } catch (Exception e) {
-                throw new RuntimeException("Validation failed for order: " + order.orderId(), e);
+                throw new DataProcessingException("Validation failed for order: " + order.orderId(), e);
             }
         }
         
@@ -2384,7 +2456,7 @@ public final class OrderConfirmationPdfGenerator {
                     return pdfPath;
                     
                 } catch (Exception e) {
-                    throw new RuntimeException("PDF generation failed for order: " + order.orderId(), e);
+                    throw new PdfGenerationException("PDF generation failed for order: " + order.orderId(), e);
                 } finally {
                     if (pdfService != null) {
                         resourceManager.releasePdfService(pdfService);
@@ -2420,7 +2492,7 @@ public final class OrderConfirmationPdfGenerator {
                 final var metrics = this.metrics.getSnapshot();
                 final var circuitStats = circuitBreaker.getStats();
                 
-                LOGGER.info("""
+                LOGGER.info(String.format("""
                     === Concurrent Processing Metrics ===
                     Total Processed: %d
                     Currently Processing: %d
@@ -2430,7 +2502,7 @@ public final class OrderConfirmationPdfGenerator {
                     Circuit Breaker: %s
                     Available Rate Tokens: %d
                     Queue Size: %d
-                    """.formatted(
+                    """,
                         metrics.totalProcessed(),
                         metrics.currentlyProcessing(),
                         metrics.averageProcessingTimeMs(),
@@ -2469,7 +2541,7 @@ public final class OrderConfirmationPdfGenerator {
             executor.shutdown();
             try {
                 if (!executor.awaitTermination(10, TimeUnit.SECONDS)) {
-                    LOGGER.warning("%s executor did not terminate gracefully, forcing shutdown".formatted(name));
+                    LOGGER.warning(String.format("%s executor did not terminate gracefully, forcing shutdown", name));
                     executor.shutdownNow();
                 }
             } catch (InterruptedException e) {
@@ -2641,7 +2713,7 @@ public final class OrderConfirmationPdfGenerator {
         LOGGER.info("-".repeat(50));
         
         final var batchOrders = createOrderBatch(10);
-        LOGGER.info("Processing %d orders concurrently...".formatted(batchOrders.size()));
+        LOGGER.info(String.format("Processing %d orders concurrently...", batchOrders.size()));
         
         final var batchStart = System.currentTimeMillis();
         final var batchResults = processor.processBatchAsync(batchOrders).get();
@@ -2659,14 +2731,14 @@ public final class OrderConfirmationPdfGenerator {
         // Process in parallel using futures
         final var stressFutures = stressOrders.stream()
             .map(processor::processOrderAsync)
-            .collect(Collectors.toList());
+            .toList();
         
-        LOGGER.info("Submitted %d orders for concurrent processing...".formatted(stressOrders.size()));
+        LOGGER.info(String.format("Submitted %d orders for concurrent processing...", stressOrders.size()));
         
         // Wait for all to complete
         final var stressResults = stressFutures.stream()
             .map(CompletableFuture::join)
-            .collect(Collectors.toList());
+            .toList();
         
         final var stressTime = System.currentTimeMillis() - stressStart;
         displayStressTestResults(stressResults, stressTime);
@@ -2759,14 +2831,14 @@ public final class OrderConfirmationPdfGenerator {
         
         LOGGER.info("🔍 Personal Data Detection Results:");
         personalData.forEach((data, classification) -> 
-            LOGGER.info("  • %s: %s".formatted(data, classification.getDisplayName())));
+            LOGGER.info(String.format("  • %s: %s", data, classification.getDisplayName())));
         
         // Demonstrate anonymization
         LOGGER.info("\n🎭 Data Anonymization Results:");
-        LOGGER.info("  • Original Email: %s".formatted(sampleCustomer.email()));
-        LOGGER.info("  • Anonymized: %s".formatted(
+        LOGGER.info(String.format("  • Original Email: %s", sampleCustomer.email()));
+        LOGGER.info(String.format("  • Anonymized: %s",
             anonymizationService.anonymizeData(sampleCustomer.email(), DataClassification.PERSONAL)));
-        LOGGER.info("  • Pseudonymized: %s".formatted(
+        LOGGER.info(String.format("  • Pseudonymized: %s",
             anonymizationService.pseudonymizeData(sampleCustomer.email(), "customer")));
         
         Thread.sleep(1000);
@@ -2785,16 +2857,16 @@ public final class OrderConfirmationPdfGenerator {
             TEST_IP_ADDRESS, TEST_USER_AGENT, Duration.ofDays(90));
         
         final var consentSummary = consentService.getConsentSummary(customerId);
-        LOGGER.info("📊 Consent Summary for %s:".formatted(customerId));
-        LOGGER.info("  • Total Consents: %d".formatted(consentSummary.totalConsents()));
-        LOGGER.info("  • Valid Consents: %d".formatted(consentSummary.validConsents()));
-        LOGGER.info("  • Expired Consents: %d".formatted(consentSummary.expiredConsents()));
-        LOGGER.info("  • Near Expiry: %d".formatted(consentSummary.nearExpiryConsents()));
+        LOGGER.info(String.format("📊 Consent Summary for %s:", customerId));
+        LOGGER.info(String.format("  • Total Consents: %d", consentSummary.totalConsents()));
+        LOGGER.info(String.format("  • Valid Consents: %d", consentSummary.validConsents()));
+        LOGGER.info(String.format("  • Expired Consents: %d", consentSummary.expiredConsents()));
+        LOGGER.info(String.format("  • Near Expiry: %d", consentSummary.nearExpiryConsents()));
         
         // Test consent withdrawal
         final var withdrawResult = consentService.withdrawConsent(customerId, 
             new ConsentType.Marketing(), TEST_IP_ADDRESS);
-        LOGGER.info("  • Marketing Consent Withdrawn: %s".formatted(withdrawResult ? "✅" : "❌"));
+        LOGGER.info(String.format("  • Marketing Consent Withdrawn: %s", withdrawResult ? "✅" : "❌"));
         
         Thread.sleep(1000);
         
@@ -2804,15 +2876,15 @@ public final class OrderConfirmationPdfGenerator {
         // Submit data export request
         final var exportRequest = sarService.submitAccessRequest(
             customerId, EXPORT_OPERATION, TEST_IP_ADDRESS, "Email Verification").get();
-        LOGGER.info("📥 Data Export Request: %s".formatted(exportRequest.requestId()));
-        LOGGER.info("  • Status: %s".formatted(exportRequest.status()));
-        LOGGER.info("  • Processing Time: %d ms".formatted(exportRequest.getProcessingTime().toMillis()));
+        LOGGER.info(String.format("📥 Data Export Request: %s", exportRequest.requestId()));
+        LOGGER.info(String.format("  • Status: %s", exportRequest.status()));
+        LOGGER.info(String.format("  • Processing Time: %d ms", exportRequest.getProcessingTime().toMillis()));
         
         // Submit deletion request (Right to be Forgotten)
         final var deleteRequest = sarService.submitAccessRequest(
             customerId, DELETE_OPERATION, TEST_IP_ADDRESS, "Email Verification").get();
-        LOGGER.info("🗑️ Data Deletion Request: %s".formatted(deleteRequest.requestId()));
-        LOGGER.info("  • Status: %s".formatted(deleteRequest.status()));
+        LOGGER.info(String.format("🗑️ Data Deletion Request: %s", deleteRequest.requestId()));
+        LOGGER.info(String.format("  • Status: %s", deleteRequest.status()));
         
         Thread.sleep(1000);
         
@@ -2820,15 +2892,15 @@ public final class OrderConfirmationPdfGenerator {
         LOGGER.info("-".repeat(60));
         
         final var auditEvents = auditService.getAuditEvents(customerId);
-        LOGGER.info("📋 Audit Events for Customer %s:".formatted(customerId));
-        auditEvents.stream().limit(5).forEach(event -> 
-            LOGGER.info("  • %s: %s - %s".formatted(
+        LOGGER.info(String.format("📋 Audit Events for Customer %s:", customerId));
+        auditEvents.stream().limit(5).forEach(event ->
+            LOGGER.info(String.format("  • %s: %s - %s",
                 event.timestamp().format(DateTimeFormatter.ofPattern(TIME_FORMAT_HH_MM_SS)),
                 event.operation().getDisplayName(),
                 event.details())));
         
         if (auditEvents.size() > 5) {
-            LOGGER.info("  • ... and %d more events".formatted(auditEvents.size() - 5));
+            LOGGER.info(String.format("  • ... and %d more events", auditEvents.size() - 5));
         }
     }
     
@@ -2847,12 +2919,12 @@ public final class OrderConfirmationPdfGenerator {
         try {
             // Generate regular PDF
             final var regularPdf = pdfService.generateOrderConfirmation(sampleOrder, false);
-            LOGGER.info("📄 Regular PDF Generated: %s".formatted(
+            LOGGER.info(String.format("📄 Regular PDF Generated: %s",
                 regularPdf.substring(regularPdf.lastIndexOf('/') + 1)));
             
             // Generate anonymized PDF
             final var anonymizedPdf = pdfService.generateOrderConfirmation(sampleOrder, true);
-            LOGGER.info("🎭 Anonymized PDF Generated: %s".formatted(
+            LOGGER.info(String.format("🎭 Anonymized PDF Generated: %s",
                 anonymizedPdf.substring(anonymizedPdf.lastIndexOf('/') + 1)));
             
             LOGGER.info("✅ Both PDFs generated with appropriate privacy controls");
@@ -2882,28 +2954,28 @@ public final class OrderConfirmationPdfGenerator {
         
         final var complianceReport = auditService.generateComplianceReport(reportStart, reportEnd);
         
-        LOGGER.info("📊 GDPR Compliance Report (%s to %s):".formatted(
+        LOGGER.info(String.format("📊 GDPR Compliance Report (%s to %s):",
             reportStart.format(DateTimeFormatter.ofPattern(TIME_FORMAT_HH_MM_SS)),
             reportEnd.format(DateTimeFormatter.ofPattern(TIME_FORMAT_HH_MM_SS))));
         
         LOGGER.info("  📈 Audit Metrics:");
-        LOGGER.info("    • Total Events: %d".formatted(complianceReport.totalEvents()));
-        LOGGER.info("    • Error Events: %d".formatted(complianceReport.errorEvents()));
-        LOGGER.info("    • Success Rate: %.2f%%".formatted(
+        LOGGER.info(String.format("    • Total Events: %d", complianceReport.totalEvents()));
+        LOGGER.info(String.format("    • Error Events: %d", complianceReport.errorEvents()));
+        LOGGER.info(String.format("    • Success Rate: %.2f%%",
             (complianceReport.totalEvents() - complianceReport.errorEvents()) * 100.0 / 
             Math.max(1, complianceReport.totalEvents())));
         
         LOGGER.info("  🔍 Operations Breakdown:");
         complianceReport.operationCounts().forEach((operation, count) ->
-            LOGGER.info("    • %s: %d events".formatted(operation.getDisplayName(), count)));
+            LOGGER.info(String.format("    • %s: %d events", operation.getDisplayName(), count)));
         
         LOGGER.info("  🏷️ Data Classification Breakdown:");
         complianceReport.classificationCounts().forEach((classification, count) ->
-            LOGGER.info("    • %s: %d events".formatted(classification.getDisplayName(), count)));
+            LOGGER.info(String.format("    • %s: %d events", classification.getDisplayName(), count)));
         
         // Check for overdue SAR requests
         final var overdueRequests = sarService.getOverdueRequests();
-        LOGGER.info("  ⏰ Overdue SAR Requests: %d".formatted(overdueRequests.size()));
+        LOGGER.info(String.format("  ⏰ Overdue SAR Requests: %d", overdueRequests.size()));
         if (!overdueRequests.isEmpty()) {
             LOGGER.warning("    ⚠️ WARNING: GDPR requires SAR processing within 30 days!");
         }
@@ -2929,8 +3001,8 @@ public final class OrderConfirmationPdfGenerator {
                 customerId,
                 "Customer",
                 "Number" + i,
-                "customer%d@test.com".formatted(i),
-                "(555) 123-%04d".formatted(i),
+                String.format("customer%d@test.com", i),
+                String.format("(555) 123-%04d", i),
                 baseOrder.customer().billingAddress(),
                 baseOrder.customer().shippingAddress()
             );
@@ -2955,12 +3027,12 @@ public final class OrderConfirmationPdfGenerator {
     }
     
     private static void displayProcessingResult(final ConcurrentOrderProcessor.ProcessingResult result) {
-        LOGGER.info("""
+        LOGGER.info(String.format("""
             ✅ Order Processed: %s
             📄 PDF: %s
             ⏱️ Time: %d ms
             📊 Status: %s
-            """.formatted(
+            """,
                 result.orderId(),
                 result.pdfPath() != null ? result.pdfPath().substring(result.pdfPath().lastIndexOf('/') + 1) : "FAILED",
                 result.processingTimeMs(),
@@ -2979,13 +3051,13 @@ public final class OrderConfirmationPdfGenerator {
             .average()
             .orElse(0.0);
         
-        LOGGER.info("""
+        LOGGER.info(String.format("""
             📈 Batch Processing Results:
             ✅ Success: %d/%d orders
             ⏱️ Total Time: %d ms
             📊 Average per Order: %.1f ms
             🚀 Throughput: %.1f orders/second
-            """.formatted(
+            """,
                 successCount, results.size(),
                 totalTime,
                 avgTime,
@@ -3002,7 +3074,7 @@ public final class OrderConfirmationPdfGenerator {
         final var failureCount = results.size() - successCount;
         final var throughput = (results.size() * 1000.0) / totalTime;
         
-        LOGGER.info("""
+        LOGGER.info(String.format("""
             ⚡ High-Throughput Stress Test Results:
             📊 Total Orders: %d
             ✅ Successful: %d
@@ -3010,7 +3082,7 @@ public final class OrderConfirmationPdfGenerator {
             ⏱️ Total Time: %d ms
             🚀 Throughput: %.1f orders/second
             💪 Success Rate: %.1f%%
-            """.formatted(
+            """,
                 results.size(),
                 successCount,
                 failureCount,
@@ -3024,7 +3096,7 @@ public final class OrderConfirmationPdfGenerator {
         final var metrics = processor.getMetrics();
         final var circuitStats = processor.getCircuitBreakerStats();
         
-        LOGGER.info("""
+        LOGGER.info(String.format("""
             📊 System Performance Metrics:
             🔢 Total Processed: %d orders
             ⚡ Currently Processing: %d
@@ -3033,7 +3105,7 @@ public final class OrderConfirmationPdfGenerator {
             ❌ Total Errors: %d
             🛡️ Circuit Breaker: %s
             🎯 Error Rate: %.2f%%
-            """.formatted(
+            """,
                 metrics.totalProcessed(),
                 metrics.currentlyProcessing(),
                 metrics.averageProcessingTimeMs(),
@@ -3048,7 +3120,7 @@ public final class OrderConfirmationPdfGenerator {
         if (!metrics.operationMetrics().isEmpty()) {
             LOGGER.info("\n🔍 Operation Breakdown:");
             metrics.operationMetrics().forEach((operation, totalTime) -> 
-                LOGGER.info("  • %s: %d ms total".formatted(operation, totalTime)));
+                LOGGER.info(String.format("  • %s: %d ms total", operation, totalTime)));
         }
     }
     
@@ -3074,7 +3146,7 @@ public final class OrderConfirmationPdfGenerator {
         // Wait for completion
         final var resilientResults = futures.stream()
             .map(CompletableFuture::join)
-            .collect(Collectors.toList());
+            .toList();
         
         final var rateLimitedCount = resilientResults.stream()
             .mapToInt(r -> r.status() == ConcurrentOrderProcessor.ProcessingStatus.FAILED && 
@@ -3082,13 +3154,13 @@ public final class OrderConfirmationPdfGenerator {
                           r.errorMessage().contains("Rate limit") ? 1 : 0)
             .sum();
         
-        LOGGER.info("""
+        LOGGER.info(String.format("""
             🛡️ Resilience Test Results:
             📊 Total Requests: %d
             ✅ Processed: %d
             🚫 Rate Limited: %d
             🔧 Circuit Breaker State: %s
-            """.formatted(
+            """,
                 resilientResults.size(),
                 resilientResults.size() - rateLimitedCount,
                 rateLimitedCount,
@@ -3106,8 +3178,9 @@ public final class OrderConfirmationPdfGenerator {
         LOGGER.info("Items: " + order.items().size());
         LOGGER.info("Backorders: " + (order.hasBackorderedItems() ? "Yes" : "No"));
         LOGGER.info("Split Shipments: " + (order.hasSplitShipments() ? "Yes" : "No"));
-        LOGGER.info("Grand Total: $%.2f".formatted(order.getGrandTotal()));
+        LOGGER.info(String.format("Grand Total: $%.2f", order.getGrandTotal()));
         LOGGER.info("=".repeat(80));
         LOGGER.info("🔄 Processing PDF generation...");
     }
-} 
+}
+
