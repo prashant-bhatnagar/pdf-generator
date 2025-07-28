@@ -18,7 +18,7 @@ import java.util.stream.Collectors;
 import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
-import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.GCMParameterSpec;
 import java.io.*;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -99,7 +99,7 @@ public final class OrderConfirmationPdfGenerator {
     
     private static final Logger LOGGER = Logger.getLogger(OrderConfirmationPdfGenerator.class.getName());
     private static final String OUTPUT_DIRECTORY = "generated-pdfs";
-    private static final String ENCRYPTION_ALGORITHM = "AES/CBC/PKCS5Padding";
+    private static final String ENCRYPTION_ALGORITHM = "AES/GCM/NoPadding";
     private static final int CACHE_MAX_SIZE = 1000;
     private static final Duration CACHE_EXPIRE_DURATION = Duration.ofHours(2);
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -847,33 +847,33 @@ public final class OrderConfirmationPdfGenerator {
         }
         
         /**
-         * Encrypts sensitive customer data for secure PDF storage
+         * Encrypts sensitive customer data for secure PDF storage using AES-GCM
          */
         public EncryptedData encryptSensitiveData(final String data) throws EncryptionException {
             try {
                 final var cipher = Cipher.getInstance(ENCRYPTION_ALGORITHM);
-                final var iv = new byte[16]; // CBC uses 16 bytes
-                SECURE_RANDOM.nextBytes(iv);
-                final var ivSpec = new IvParameterSpec(iv);
+                final var nonce = new byte[12]; // GCM uses 12 bytes for nonce
+                SECURE_RANDOM.nextBytes(nonce);
+                final var gcmSpec = new GCMParameterSpec(128, nonce); // 128-bit authentication tag
                 
-                cipher.init(Cipher.ENCRYPT_MODE, secretKey, ivSpec);
+                cipher.init(Cipher.ENCRYPT_MODE, secretKey, gcmSpec);
                 final var encryptedBytes = cipher.doFinal(data.getBytes());
                 
-                return new EncryptedData(encryptedBytes, iv);
+                return new EncryptedData(encryptedBytes, nonce);
             } catch (Exception e) {
                 throw new EncryptionException("Failed to encrypt sensitive data", e);
             }
         }
         
         /**
-         * Decrypts sensitive data for processing
+         * Decrypts sensitive data for processing using AES-GCM
          */
         public String decryptSensitiveData(final EncryptedData encryptedData) throws EncryptionException {
             try {
                 final var cipher = Cipher.getInstance(ENCRYPTION_ALGORITHM);
-                final var ivSpec = new IvParameterSpec(encryptedData.iv());
+                final var gcmSpec = new GCMParameterSpec(128, encryptedData.nonce()); // 128-bit authentication tag
                 
-                cipher.init(Cipher.DECRYPT_MODE, secretKey, ivSpec);
+                cipher.init(Cipher.DECRYPT_MODE, secretKey, gcmSpec);
                 final var decryptedBytes = cipher.doFinal(encryptedData.data());
                 
                 return new String(decryptedBytes);
@@ -882,10 +882,10 @@ public final class OrderConfirmationPdfGenerator {
             }
         }
         
-        public record EncryptedData(byte[] data, byte[] iv) {
+        public record EncryptedData(byte[] data, byte[] nonce) {
             public EncryptedData {
                 Objects.requireNonNull(data, "Encrypted data cannot be null");
-                Objects.requireNonNull(iv, "IV cannot be null");
+                Objects.requireNonNull(nonce, "Nonce cannot be null");
             }
             
             @Override
@@ -893,19 +893,19 @@ public final class OrderConfirmationPdfGenerator {
                 if (this == obj) return true;
                 if (obj == null || getClass() != obj.getClass()) return false;
                 EncryptedData that = (EncryptedData) obj;
-                return Arrays.equals(data, that.data) && Arrays.equals(iv, that.iv);
+                return Arrays.equals(data, that.data) && Arrays.equals(nonce, that.nonce);
             }
             
             @Override
             public int hashCode() {
                 int result = Arrays.hashCode(data);
-                result = 31 * result + Arrays.hashCode(iv);
+                result = 31 * result + Arrays.hashCode(nonce);
                 return result;
             }
             
             @Override
             public String toString() {
-                return "EncryptedData{data.length=" + data.length + ", iv.length=" + iv.length + "}";
+                return "EncryptedData{data.length=" + data.length + ", nonce.length=" + nonce.length + "}";
             }
         }
     }
@@ -3183,4 +3183,3 @@ public final class OrderConfirmationPdfGenerator {
         LOGGER.info("🔄 Processing PDF generation...");
     }
 }
-
