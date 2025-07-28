@@ -1959,10 +1959,9 @@ public final class OrderConfirmationPdfGenerator {
                                                .toList();
                 
                 if (!invalidCoupons.isEmpty()) {
+                    final var invalidCouponCodes = invalidCoupons.stream().map(Coupon::couponCode).collect(Collectors.joining(", "));
                     LOGGER.warning(String.format("Order %s has invalid coupons: %s",
-                        order.orderId(), 
-                        invalidCoupons.stream().map(Coupon::couponCode).collect(Collectors.joining(", "))
-                    ));
+                        order.orderId(), invalidCouponCodes));
                 }
                 
                 return order;
@@ -2896,7 +2895,8 @@ public final class OrderConfirmationPdfGenerator {
         
         final var auditEvents = auditService.getAuditEvents(customerId);
         LOGGER.info(String.format("📋 Audit Events for Customer %s:", customerId));
-        auditEvents.stream().limit(5).forEach(event ->
+        final var limitedEvents = auditEvents.stream().limit(5);
+        limitedEvents.forEach(event ->
             LOGGER.info(String.format("  • %s: %s - %s",
                 event.timestamp().format(DateTimeFormatter.ofPattern(TIME_FORMAT_HH_MM_SS)),
                 event.operation().getDisplayName(),
