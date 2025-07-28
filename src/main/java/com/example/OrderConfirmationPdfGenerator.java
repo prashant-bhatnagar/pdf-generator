@@ -1010,7 +1010,7 @@ public final class OrderConfirmationPdfGenerator {
         }
         
         private String generateAnonymousEmail() {
-            return String.format("user%d@anonymized.com", Math.abs(secureRandom.nextInt()));
+            return String.format("user%d@anonymized.com", secureRandom.nextInt());
         }
         
         private String generateAnonymousPhone() {
@@ -1068,8 +1068,8 @@ public final class OrderConfirmationPdfGenerator {
             );
             
             // Store in memory for immediate access
-            auditLog.computeIfAbsent(request.customerId() != null ? request.customerId() : SYSTEM_OPERATOR, k -> new ArrayList<>())
-                   .add(event);
+            final var customerKey = request.customerId() != null ? request.customerId() : SYSTEM_OPERATOR;
+            auditLog.computeIfAbsent(customerKey, k -> new ArrayList<>()).add(event);
             
             // Log to standard logger
             LOGGER.info("DATA_PROTECTION_AUDIT: " + event.toLogEntry());
@@ -1085,8 +1085,9 @@ public final class OrderConfirmationPdfGenerator {
                                          final DataClassification classification, final String operatorId,
                                          final String ipAddress, final String details, final boolean successful,
                                          final String errorMessage) {
-            logDataProtectionEvent(new AuditEventRequest(customerId, operation, classification, operatorId, 
-                                                       ipAddress, details, successful, errorMessage));
+            final var request = new AuditEventRequest(customerId, operation, classification, operatorId, 
+                                                    ipAddress, details, successful, errorMessage);
+            logDataProtectionEvent(request);
         }
         
         public record AuditEventRequest(
@@ -1166,13 +1167,14 @@ public final class OrderConfirmationPdfGenerator {
                 
             } catch (IOException e) {
                 LOGGER.severe("Failed to persist audit event: " + e.getMessage());
+                // Re-throw with context for proper error handling upstream
                 throw new DataProcessingException("Audit event persistence failed", e);
             }
         }
         
         private void persistAuditLogs() {
-            LOGGER.info(String.format("Persisting audit logs - total events in memory: %d", 
-                auditLog.values().stream().mapToInt(java.util.List::size).sum()));
+            final var totalEvents = auditLog.values().stream().mapToInt(java.util.List::size).sum();
+            LOGGER.info(String.format("Persisting audit logs - total events in memory: %d", totalEvents));
         }
         
         private void cleanupOldLogs() {
@@ -1181,7 +1183,8 @@ public final class OrderConfirmationPdfGenerator {
             auditLog.values().forEach(events -> 
                 events.removeIf(event -> event.timestamp().isBefore(cutoffDate)));
             
-            LOGGER.info(String.format("Cleaned up audit logs older than %s", cutoffDate));
+            final var cutoffDateStr = cutoffDate.toString();
+            LOGGER.info(String.format("Cleaned up audit logs older than %s", cutoffDateStr));
         }
         
         public void shutdown() {
@@ -1190,7 +1193,7 @@ public final class OrderConfirmationPdfGenerator {
                 if (!auditExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
                     auditExecutor.shutdownNow();
                 }
-            } catch (InterruptedException e) {
+            } catch (InterruptedException _) {
                 auditExecutor.shutdownNow();
                 Thread.currentThread().interrupt();
             }
@@ -1228,7 +1231,7 @@ public final class OrderConfirmationPdfGenerator {
                                          final Duration validFor) {
             
             final var consentId = "CONSENT-" + System.currentTimeMillis() + "-" + 
-                                Math.abs(customerId.hashCode());
+                                customerId.hashCode();
             final var grantedAt = LocalDateTime.now();
             final var expiresAt = validFor != null ? grantedAt.plus(validFor) : null;
             
@@ -1362,7 +1365,7 @@ public final class OrderConfirmationPdfGenerator {
                 final String verificationMethod) {
             
             final var requestId = "SAR-" + System.currentTimeMillis() + "-" + 
-                                Math.abs(customerId.hashCode());
+                                customerId.hashCode();
             
             final var request = new SubjectAccessRequest(
                 requestId, customerId, requestType, LocalDateTime.now(), null,
@@ -1500,7 +1503,7 @@ public final class OrderConfirmationPdfGenerator {
             }
         }
         
-        private String performDataDeletion(final String customerId) {
+        private String performDataDeletion(final String _customerId) {
             // Implement comprehensive data deletion
             final var deletedRecords = new HashMap<String, Integer>();
             
@@ -1525,7 +1528,7 @@ public final class OrderConfirmationPdfGenerator {
                 if (!requestExecutor.awaitTermination(10, TimeUnit.SECONDS)) {
                     requestExecutor.shutdownNow();
                 }
-            } catch (InterruptedException e) {
+            } catch (InterruptedException _) {
                 requestExecutor.shutdownNow();
                 Thread.currentThread().interrupt();
             }
@@ -2240,7 +2243,7 @@ public final class OrderConfirmationPdfGenerator {
                 if (!cleanupExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
                     cleanupExecutor.shutdownNow();
                 }
-            } catch (InterruptedException e) {
+            } catch (InterruptedException _) {
                 cleanupExecutor.shutdownNow();
                 Thread.currentThread().interrupt();
             }
@@ -2475,7 +2478,7 @@ public final class OrderConfirmationPdfGenerator {
                             // Process in background without blocking
                             CompletableFuture.runAsync(() -> processOrderInternal(request), mainExecutor);
                         }
-                    } catch (InterruptedException e) {
+                    } catch (InterruptedException _) {
                         Thread.currentThread().interrupt();
                         break;
                     } catch (Exception e) {
@@ -2544,7 +2547,7 @@ public final class OrderConfirmationPdfGenerator {
                     LOGGER.warning(String.format("%s executor did not terminate gracefully, forcing shutdown", name));
                     executor.shutdownNow();
                 }
-            } catch (InterruptedException e) {
+            } catch (InterruptedException _) {
                 executor.shutdownNow();
                 Thread.currentThread().interrupt();
             }
@@ -3137,7 +3140,7 @@ public final class OrderConfirmationPdfGenerator {
             // Small delay to simulate realistic load
             try {
                 Thread.sleep(5); // Reduced delay for faster demo
-            } catch (InterruptedException e) {
+            } catch (InterruptedException _) {
                 Thread.currentThread().interrupt();
                 break;
             }
