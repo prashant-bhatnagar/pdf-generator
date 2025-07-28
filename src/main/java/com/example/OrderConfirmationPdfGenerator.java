@@ -1072,7 +1072,7 @@ public final class OrderConfirmationPdfGenerator {
             auditLog.computeIfAbsent(customerKey, k -> new ArrayList<>()).add(event);
             
             // Log to standard logger
-            LOGGER.info("DATA_PROTECTION_AUDIT: " + event.toLogEntry());
+            LOGGER.info(String.format("DATA_PROTECTION_AUDIT: %s", event.toLogEntry()));
             
             // Async persistence
             auditExecutor.submit(() -> persistEvent(event));
@@ -1080,7 +1080,9 @@ public final class OrderConfirmationPdfGenerator {
         
         /**
          * Log data protection event for compliance audit trail (legacy method)
+         * @deprecated Use {@link #logDataProtectionEvent(AuditEventRequest)} instead for better maintainability.
          */
+        @Deprecated
         public void logDataProtectionEvent(final String customerId, final DataOperation operation,
                                          final DataClassification classification, final String operatorId,
                                          final String ipAddress, final String details, final boolean successful,
@@ -1166,7 +1168,7 @@ public final class OrderConfirmationPdfGenerator {
                 }
                 
             } catch (IOException e) {
-                LOGGER.severe("Failed to persist audit event: " + e.getMessage());
+                LOGGER.severe(String.format("Failed to persist audit event for eventId=%s: %s", event.eventId(), e.getMessage()));
                 // Re-throw with context for proper error handling upstream
                 throw new DataProcessingException("Audit event persistence failed", e);
             }
@@ -1174,7 +1176,8 @@ public final class OrderConfirmationPdfGenerator {
         
         private void persistAuditLogs() {
             final var totalEvents = auditLog.values().stream().mapToInt(java.util.List::size).sum();
-            LOGGER.info(String.format("Persisting audit logs - total events in memory: %d", totalEvents));
+            final var logMsg = String.format("Persisting audit logs - total events in memory: %d", totalEvents);
+            LOGGER.info(logMsg);
         }
         
         private void cleanupOldLogs() {
@@ -1184,7 +1187,8 @@ public final class OrderConfirmationPdfGenerator {
                 events.removeIf(event -> event.timestamp().isBefore(cutoffDate)));
             
             final var cutoffDateStr = cutoffDate.toString();
-            LOGGER.info(String.format("Cleaned up audit logs older than %s", cutoffDateStr));
+            final var logMsg = String.format("Cleaned up audit logs older than %s", cutoffDateStr);
+            LOGGER.info(logMsg);
         }
         
         public void shutdown() {
@@ -1446,7 +1450,7 @@ public final class OrderConfirmationPdfGenerator {
         
         private SubjectAccessRequest processDataDeletionRequest(final SubjectAccessRequest request) {
             // Implement right to be forgotten
-            final var deletionSummary = performDataDeletion(request.customerId());
+            final var deletionSummary = performDataDeletion();
             return updateRequestStatus(request, COMPLETED_STATUS, 
                 "Data deletion completed: " + deletionSummary);
         }
@@ -1503,7 +1507,7 @@ public final class OrderConfirmationPdfGenerator {
             }
         }
         
-        private String performDataDeletion(final String _customerId) {
+        private String performDataDeletion() {
             // Implement comprehensive data deletion
             final var deletedRecords = new HashMap<String, Integer>();
             
@@ -2178,11 +2182,15 @@ public final class OrderConfirmationPdfGenerator {
             
             // Initialize pools
             for (int i = 0; i < PDF_GENERATION_POOL_SIZE; i++) {
-                pdfServicePool.offer(new PdfGenerationService());
+                if (!pdfServicePool.offer(new PdfGenerationService())) {
+                    LOGGER.warning("Failed to add PdfGenerationService to the pool during initialization.");
+                }
             }
             
             for (int i = 0; i < ENCRYPTION_POOL_SIZE; i++) {
-                encryptionServicePool.offer(new EncryptionService());
+                if (!encryptionServicePool.offer(new EncryptionService())) {
+                    LOGGER.warning("Failed to add EncryptionService to the pool during initialization.");
+                }
             }
             
             // Schedule periodic cleanup
@@ -2205,7 +2213,9 @@ public final class OrderConfirmationPdfGenerator {
         
         public void releasePdfService(final PdfGenerationService service) {
             if (pdfServicePool.size() < PDF_GENERATION_POOL_SIZE) {
-                pdfServicePool.offer(service);
+                if (!pdfServicePool.offer(service)) {
+                    LOGGER.warning("Failed to return PdfGenerationService to the pool.");
+                }
             }
         }
         
@@ -2224,7 +2234,9 @@ public final class OrderConfirmationPdfGenerator {
         
         public void releaseEncryptionService(final EncryptionService service) {
             if (encryptionServicePool.size() < ENCRYPTION_POOL_SIZE) {
-                encryptionServicePool.offer(service);
+                if (!encryptionServicePool.offer(service)) {
+                    LOGGER.warning("Failed to return EncryptionService to the pool.");
+                }
             }
         }
         
