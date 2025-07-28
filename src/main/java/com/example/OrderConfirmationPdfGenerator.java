@@ -33,6 +33,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Logger;
+import java.util.logging.Level;
 
 // === Data Protection & Privacy Imports ===
 import java.nio.charset.StandardCharsets;
@@ -1074,20 +1075,25 @@ public final class OrderConfirmationPdfGenerator {
             // Log to standard logger
             LOGGER.info(String.format("DATA_PROTECTION_AUDIT: %s", event.toLogEntry()));
             
-            // Async persistence
-            auditExecutor.submit(() -> persistEvent(event));
+            // Async persistence - only submit if executor is not shutdown
+            if (!auditExecutor.isShutdown()) {
+                auditExecutor.submit(() -> persistEvent(event));
+            }
         }
         
         /**
          * Log data protection event for compliance audit trail (legacy method)
          * @deprecated Use {@link #logDataProtectionEvent(AuditEventRequest)} instead for better maintainability.
-         * TODO: Remove this method in a future release. Kept for backward compatibility.
+         * Scheduled for removal in version 3.0.0. Kept for backward compatibility.
          */
         @Deprecated(since = "2.2.0", forRemoval = true)
         public void logDataProtectionEvent(final String customerId, final DataOperation operation,
                                          final DataClassification classification, final String operatorId,
                                          final String ipAddress, final String details, final boolean successful,
                                          final String errorMessage) {
+   
+            // Note: This method has 8 parameters which exceeds the recommended limit of 7.
+            // The replacement method uses AuditEventRequest to encapsulate parameters.
             final var request = new AuditEventRequest(customerId, operation, classification, operatorId, 
                                                     ipAddress, details, successful, errorMessage);
             logDataProtectionEvent(request);
@@ -1199,9 +1205,10 @@ public final class OrderConfirmationPdfGenerator {
                 if (!auditExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
                     auditExecutor.shutdownNow();
                 }
-            } catch (InterruptedException _) {
+            } catch (InterruptedException e) {
                 auditExecutor.shutdownNow();
                 Thread.currentThread().interrupt();
+                throw new RuntimeException("Audit service shutdown interrupted", e);
             }
         }
         
@@ -1534,9 +1541,10 @@ public final class OrderConfirmationPdfGenerator {
                 if (!requestExecutor.awaitTermination(10, TimeUnit.SECONDS)) {
                     requestExecutor.shutdownNow();
                 }
-            } catch (InterruptedException _) {
+            } catch (InterruptedException e) {
                 requestExecutor.shutdownNow();
                 Thread.currentThread().interrupt();
+                throw new RuntimeException("Subject access request service shutdown interrupted", e);
             }
         }
     }
@@ -2217,10 +2225,8 @@ public final class OrderConfirmationPdfGenerator {
         }
         
         public void releasePdfService(final PdfGenerationService service) {
-            if (pdfServicePool.size() < PDF_GENERATION_POOL_SIZE) {
-                if (!pdfServicePool.offer(service)) {
-                    LOGGER.warning("Failed to return PdfGenerationService to the pool.");
-                }
+            if (pdfServicePool.size() < PDF_GENERATION_POOL_SIZE && !pdfServicePool.offer(service)) {
+                LOGGER.warning("Failed to return PdfGenerationService to the pool.");
             }
         }
         
@@ -2238,15 +2244,13 @@ public final class OrderConfirmationPdfGenerator {
         }
         
         public void releaseEncryptionService(final EncryptionService service) {
-            if (encryptionServicePool.size() < ENCRYPTION_POOL_SIZE) {
-                if (!encryptionServicePool.offer(service)) {
-                    LOGGER.warning("Failed to return EncryptionService to the pool.");
-                }
+            if (encryptionServicePool.size() < ENCRYPTION_POOL_SIZE && !encryptionServicePool.offer(service)) {
+                LOGGER.warning("Failed to return EncryptionService to the pool.");
             }
         }
         
         private void performCleanup() {
-            if (!isShutdown) {
+            if (!isShutdown && LOGGER.isLoggable(Level.INFO)) {
                 LOGGER.info(String.format("Performing resource pool cleanup - PDF pool: %d, Encryption pool: %d",
                     pdfServicePool.size(), encryptionServicePool.size()));
             }
@@ -2259,9 +2263,10 @@ public final class OrderConfirmationPdfGenerator {
                 if (!cleanupExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
                     cleanupExecutor.shutdownNow();
                 }
-            } catch (InterruptedException _) {
+            } catch (InterruptedException e) {
                 cleanupExecutor.shutdownNow();
                 Thread.currentThread().interrupt();
+                throw new RuntimeException("Resource pool manager shutdown interrupted", e);
             }
         }
     }
@@ -2490,13 +2495,13 @@ public final class OrderConfirmationPdfGenerator {
                 while (!isShutdown) {
                     try {
                         final var request = requestQueue.poll(1, TimeUnit.SECONDS);
-                        if (request != null) {
-                            // Process in background without blocking
-                            CompletableFuture.runAsync(() -> processOrderInternal(request), mainExecutor);
-                        }
-                    } catch (InterruptedException _) {
+                                        if (request != null && !mainExecutor.isShutdown()) {
+                    // Process in background without blocking
+                    CompletableFuture.runAsync(() -> processOrderInternal(request), mainExecutor);
+                }
+                    } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
-                        break;
+                        throw new RuntimeException("Background processing interrupted", e);
                     } catch (Exception e) {
                         LOGGER.severe("Background processing error: " + e.getMessage());
                     }
@@ -2563,9 +2568,10 @@ public final class OrderConfirmationPdfGenerator {
                     LOGGER.warning(String.format("%s executor did not terminate gracefully, forcing shutdown", name));
                     executor.shutdownNow();
                 }
-            } catch (InterruptedException _) {
+            } catch (InterruptedException e) {
                 executor.shutdownNow();
                 Thread.currentThread().interrupt();
+                throw new RuntimeException("Executor shutdown interrupted", e);
             }
         }
         
@@ -3157,9 +3163,9 @@ public final class OrderConfirmationPdfGenerator {
             // Small delay to simulate realistic load
             try {
                 Thread.sleep(5); // Reduced delay for faster demo
-            } catch (InterruptedException _) {
+            } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                break;
+                throw new RuntimeException("Resilience test interrupted", e);
             }
         }
         
