@@ -1081,8 +1081,9 @@ public final class OrderConfirmationPdfGenerator {
         /**
          * Log data protection event for compliance audit trail (legacy method)
          * @deprecated Use {@link #logDataProtectionEvent(AuditEventRequest)} instead for better maintainability.
+         * TODO: Remove this method in a future release. Kept for backward compatibility.
          */
-        @Deprecated
+        @Deprecated(since = "2.2.0", forRemoval = true)
         public void logDataProtectionEvent(final String customerId, final DataOperation operation,
                                          final DataClassification classification, final String operatorId,
                                          final String ipAddress, final String details, final boolean successful,
@@ -1168,9 +1169,10 @@ public final class OrderConfirmationPdfGenerator {
                 }
                 
             } catch (IOException e) {
-                LOGGER.severe(String.format("Failed to persist audit event for eventId=%s: %s", event.eventId(), e.getMessage()));
+                final var errorMsg = String.format("Failed to persist audit event for eventId=%s: %s", event.eventId(), e.getMessage());
+                LOGGER.severe(errorMsg);
                 // Re-throw with context for proper error handling upstream
-                throw new DataProcessingException("Audit event persistence failed", e);
+                throw new DataProcessingException(errorMsg, e);
             }
         }
         
@@ -1569,8 +1571,9 @@ public final class OrderConfirmationPdfGenerator {
                 try {
                     return generateOrderConfirmation(order);
                 } catch (Exception e) {
-                    LOGGER.severe("Failed to generate PDF for order: " + order.orderId() + " - " + e.getMessage());
-                    throw new PdfGenerationException("PDF generation failed", e);
+                    final var errorMsg = String.format("Failed to generate PDF for order: %s - %s", order.orderId(), e.getMessage());
+                    LOGGER.severe(errorMsg);
+                    throw new PdfGenerationException(errorMsg, e);
                 }
             });
         }
@@ -1624,7 +1627,8 @@ public final class OrderConfirmationPdfGenerator {
                 
                 document.close();
             } catch (Exception e) {
-                throw new PdfGenerationException("Failed to generate PDF", e);
+                final var errorMsg = String.format("Failed to generate PDF for order: %s - %s", order.orderId(), e.getMessage());
+                throw new PdfGenerationException(errorMsg, e);
             }
             
             // Audit successful generation
@@ -1634,8 +1638,9 @@ public final class OrderConfirmationPdfGenerator {
                 "PDF generated successfully: " + filename, true, null
             );
             
-            LOGGER.info(String.format("Generated %s PDF for order: %s",
-                anonymizeData ? "anonymized" : "full", order.orderId()));
+            final var logMsg = String.format("Generated %s PDF for order: %s",
+                anonymizeData ? "anonymized" : "full", order.orderId());
+            LOGGER.info(logMsg);
             return filename;
         }
         
