@@ -1099,6 +1099,38 @@ public final class OrderConfirmationPdfGenerator {
             logDataProtectionEvent(request);
         }
         
+        /**
+         * Log data protection event with simplified parameters (5 parameters max)
+         * @param customerId The customer identifier
+         * @param operation The data operation being performed
+         * @param context The audit context containing operator, IP, and details
+         * @param successful Whether the operation was successful
+         * @param errorMessage Optional error message if operation failed
+         */
+        public void logDataProtectionEvent(final String customerId, final DataOperation operation,
+                                         final AuditContext context, final boolean successful,
+                                         final String errorMessage) {
+            final var request = new AuditEventRequest(customerId, operation, context.classification(), 
+                                                    context.operatorId(), context.ipAddress(), 
+                                                    context.details(), successful, errorMessage);
+            logDataProtectionEvent(request);
+        }
+        
+        /**
+         * Audit context record to encapsulate operator and context information
+         */
+        public record AuditContext(
+            DataClassification classification,
+            String operatorId,
+            String ipAddress,
+            String details
+        ) {
+            public AuditContext {
+                Objects.requireNonNull(classification, "Classification cannot be null");
+                Objects.requireNonNull(operatorId, "Operator ID cannot be null");
+            }
+        }
+        
         public record AuditEventRequest(
             String customerId,
             DataOperation operation,
@@ -2509,6 +2541,18 @@ public final class OrderConfirmationPdfGenerator {
             });
         }
         
+        private static final String METRICS_LOG_TEMPLATE = """
+            === Concurrent Processing Metrics ===
+            Total Processed: %d
+            Currently Processing: %d
+            Average Time: %d ms
+            Peak Concurrency: %d
+            Total Errors: %d
+            Circuit Breaker: %s
+            Available Rate Tokens: %d
+            Queue Size: %d
+            """;
+            
         private void startMonitoring() {
             monitoringExecutor.scheduleAtFixedRate(() -> {
                 if (isShutdown) return; // Stop monitoring if shutdown
@@ -2516,17 +2560,7 @@ public final class OrderConfirmationPdfGenerator {
                 final var metrics = this.metrics.getSnapshot();
                 final var circuitStats = circuitBreaker.getStats();
                 
-                LOGGER.info(String.format("""
-                    === Concurrent Processing Metrics ===
-                    Total Processed: %d
-                    Currently Processing: %d
-                    Average Time: %d ms
-                    Peak Concurrency: %d
-                    Total Errors: %d
-                    Circuit Breaker: %s
-                    Available Rate Tokens: %d
-                    Queue Size: %d
-                    """,
+                LOGGER.info(String.format(METRICS_LOG_TEMPLATE,
                         metrics.totalProcessed(),
                         metrics.currentlyProcessing(),
                         metrics.averageProcessingTimeMs(),
